@@ -2,7 +2,10 @@ pub mod models;
 pub mod keys;
 pub mod verifier;
 
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
+use crate::core::middleware::AuthMiddleware;
 use crate::auth::models::{
     CreateUserRequest, DeleteAccountRequest, GetAccountInfoRequest, GetAccountInfoResponse,
     ListUsersResponse, UpdateUserRequest, UserRecord, EmailLinkRequest, EmailLinkResponse,
@@ -65,9 +68,23 @@ pub struct FirebaseAuth {
 }
 
 impl FirebaseAuth {
-    pub fn new(client: ClientWithMiddleware, project_id: String, service_account_key: Option<ServiceAccountKey>) -> Self {
+    pub fn new(service_account_key: ServiceAccountKey) -> Self {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+
+        let client = ClientBuilder::new(Client::new())
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .with(AuthMiddleware::new(service_account_key.clone()))
+            .build();
+
+        let project_id = service_account_key.project_id.clone().unwrap_or_default();
         let verifier = Arc::new(IdTokenVerifier::new(project_id.clone()));
-        Self { client, project_id, verifier, service_account_key }
+
+        Self {
+            client,
+            project_id,
+            verifier,
+            service_account_key: Some(service_account_key)
+        }
     }
 
     // Base URL for Identity Toolkit API
