@@ -7,6 +7,7 @@ use crate::auth::models::{
     ListUsersResponse, UpdateUserRequest, UserRecord,
 };
 use thiserror::Error;
+use reqwest::header;
 
 #[cfg(test)]
 mod tests;
@@ -21,6 +22,8 @@ pub enum AuthError {
     ApiError(String),
     #[error("User not found")]
     UserNotFound,
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
 }
 
 #[derive(Clone)]
@@ -44,7 +47,8 @@ impl FirebaseAuth {
 
         let response = self.client
             .post(&url)
-            .json(&request)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(&request)?)
             .send()
             .await?;
 
@@ -63,7 +67,8 @@ impl FirebaseAuth {
 
         let response = self.client
             .post(&url)
-            .json(&request)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(&request)?)
             .send()
             .await?;
 
@@ -83,7 +88,8 @@ impl FirebaseAuth {
 
         let response = self.client
             .post(&url)
-            .json(&request)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(&request)?)
             .send()
             .await?;
 
@@ -102,7 +108,8 @@ impl FirebaseAuth {
 
         let response = self.client
             .post(&url)
-            .json(&request)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(&request)?)
             .send()
             .await?;
 

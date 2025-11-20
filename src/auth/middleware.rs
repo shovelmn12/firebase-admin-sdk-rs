@@ -5,9 +5,10 @@ use yup_oauth2::{ServiceAccountAuthenticator, ServiceAccountKey};
 use yup_oauth2::authenticator::Authenticator;
 use hyper_rustls::HttpsConnector;
 use hyper::client::HttpConnector;
+use http::Extensions;
 
 // The type returned by ServiceAccountAuthenticator::builder(...).build().await
-// In yup-oauth2 v8 with hyper-rustls 0.26, it returns Authenticator<HttpsConnector<HttpConnector>>.
+// In yup-oauth2 v8 it returns Authenticator<HttpsConnector<HttpConnector>> using hyper 0.14 / hyper-rustls 0.24.
 type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 
 pub struct AuthMiddleware {
@@ -25,15 +26,12 @@ impl AuthMiddleware {
 
     async fn get_token(&self) -> Result<String, anyhow::Error> {
         let auth = self.authenticator.get_or_try_init(|| async {
-            // ServiceAccountAuthenticator::builder returns a builder.
-            // .build() returns a Future that resolves to Authenticator<...>.
             ServiceAccountAuthenticator::builder(self.key.clone())
                 .build()
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
         }).await?;
 
-        // Scopes for Firebase
         let scopes = &["https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/firebase"];
 
         let token = auth.token(scopes).await?;
@@ -47,7 +45,7 @@ impl Middleware for AuthMiddleware {
     async fn handle(
         &self,
         mut req: Request,
-        extensions: &mut task_local_extensions::Extensions,
+        extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
 
