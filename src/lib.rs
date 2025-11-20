@@ -1,11 +1,12 @@
 pub mod auth;
+pub mod core;
 
 use auth::FirebaseAuth;
 use yup_oauth2::ServiceAccountKey;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
-use crate::auth::middleware::AuthMiddleware;
+use crate::core::middleware::AuthMiddleware;
 
 pub struct FirebaseApp {
     client: ClientWithMiddleware,

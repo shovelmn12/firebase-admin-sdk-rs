@@ -1,4 +1,3 @@
-pub mod middleware;
 pub mod models;
 
 use reqwest_middleware::ClientWithMiddleware;
