@@ -126,3 +126,88 @@ pub struct GetAccountInfoResponse {
 pub struct DeleteAccountRequest {
     pub local_id: String,
 }
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailLinkRequest {
+    pub request_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continue_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_handle_code_in_app: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dynamic_link_domain: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub android_package_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub android_minimum_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub android_install_app: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ios_bundle_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailLinkResponse {
+    pub email: Option<String>,
+    pub oob_link: String,
+}
+
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UserImportRecord {
+    pub local_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_salt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub photo_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_attributes: Option<String>,
+    // Additional fields like mfaInfo, tenantId can be added
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportUsersRequest {
+    pub users: Vec<UserImportRecord>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<UserImportHash>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserImportHash {
+    pub hash_algorithm: String,
+    pub key: String, // base64 encoded
+    pub salt_separator: String, // base64 encoded
+    pub rounds: i32,
+    pub memory_cost: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportUsersResponse {
+    pub error: Option<Vec<ImportUserError>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportUserError {
+    pub index: usize,
+    pub message: String,
+}

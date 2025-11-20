@@ -30,6 +30,6 @@ impl FirebaseApp {
 
     pub fn auth(&self) -> FirebaseAuth {
         let project_id = self.key.project_id.clone().unwrap_or_default();
-        FirebaseAuth::new(self.client.clone(), project_id)
+        FirebaseAuth::new(self.client.clone(), project_id, Some(self.key.clone()))
     }
 }
