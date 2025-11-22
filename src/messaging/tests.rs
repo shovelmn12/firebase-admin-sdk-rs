@@ -152,3 +152,114 @@ fn test_batch_response_aggregation() {
     assert_eq!(batch.failure_count, 1);
     assert_eq!(batch.responses.len(), 3);
 }
+
+#[tokio::test]
+async fn test_send_validation() {
+    let sa_key = yup_oauth2::ServiceAccountKey {
+        key_type: Some("service_account".to_string()),
+        project_id: Some("test-project".to_string()),
+        private_key: "-----BEGIN PRIVATE KEY-----\n-----END PRIVATE KEY-----\n".to_string(),
+        client_email: "test@example.com".to_string(),
+        client_id: Some("12345".to_string()),
+        auth_uri: Some("https://accounts.google.com/o/oauth2/auth".to_string()),
+        token_uri: "https://oauth2.googleapis.com/token".to_string(),
+        auth_provider_x509_cert_url: Some("https://www.googleapis.com/oauth2/v1/certs".to_string()),
+        client_x509_cert_url: Some("https://www.googleapis.com/robot/v1/metadata/x509/test".to_string()),
+        private_key_id: None,
+    };
+    let messaging = FirebaseMessaging::new(sa_key);
+
+    // No target
+    let msg1 = Message::default();
+    let err = messaging.send(&msg1).await.unwrap_err();
+    assert!(matches!(err, MessagingError::ApiError(_)));
+    assert!(err.to_string().contains("exactly one of"));
+
+    // Multiple targets
+    let msg2 = Message {
+        token: Some("token".to_string()),
+        topic: Some("topic".to_string()),
+        ..Default::default()
+    };
+    let err = messaging.send(&msg2).await.unwrap_err();
+    assert!(matches!(err, MessagingError::ApiError(_)));
+    assert!(err.to_string().contains("exactly one of"));
+
+    // Multicast with target in base message
+    let base_msg = Message {
+        topic: Some("topic".to_string()),
+        ..Default::default()
+    };
+    let err = messaging.send_multicast_request(&base_msg, &["token"], false).await.unwrap_err();
+    assert!(matches!(err, MessagingError::ApiError(_)));
+    assert!(err.to_string().contains("Multicast base message must not"));
+}
+
+
+#[test]
+fn test_parse_multipart_response() {
+    let sa_key = yup_oauth2::ServiceAccountKey {
+        key_type: Some("service_account".to_string()),
+        project_id: Some("test-project".to_string()),
+        private_key: "-----BEGIN PRIVATE KEY-----\n-----END PRIVATE KEY-----\n".to_string(),
+        client_email: "test@example.com".to_string(),
+        client_id: Some("12345".to_string()),
+        auth_uri: Some("https://accounts.google.com/o/oauth2/auth".to_string()),
+        token_uri: "https://oauth2.googleapis.com/token".to_string(),
+        auth_provider_x509_cert_url: Some("https://www.googleapis.com/oauth2/v1/certs".to_string()),
+        client_x509_cert_url: Some("https://www.googleapis.com/robot/v1/metadata/x509/test".to_string()),
+        private_key_id: None,
+    };
+    let messaging = FirebaseMessaging::new(sa_key);
+
+    let body = "--batch_123\r\n\
+                Content-Type: application/http\r\n\
+                Content-Transfer-Encoding: binary\r\n\
+                \r\n\
+                HTTP/1.1 200 OK\r\n\
+                Content-Type: application/json; charset=UTF-8\r\n\
+                \r\n\
+                {\r\n\
+                \x20 \"name\": \"projects/test-project/messages/1\"\r\n\
+                }\r\n\
+                --batch_123\r\n\
+                Content-Type: application/http\r\n\
+                Content-Transfer-Encoding: binary\r\n\
+                \r\n\
+                HTTP/1.1 400 Bad Request\r\n\
+                Content-Type: application/json; charset=UTF-8\r\n\
+                \r\n\
+                {\r\n\
+                \x20 \"error\": {\r\n\
+                \x20   \"code\": 400,\r\n\
+                \x20   \"message\": \"Invalid registration token\",\r\n\
+                \x20   \"status\": \"INVALID_ARGUMENT\"\r\n\
+                \x20 }\r\n\
+                }\r\n\
+                --batch_123--\r\n";
+
+    let responses = messaging.parse_multipart_response(body, "batch_123").unwrap();
+    assert_eq!(responses.len(), 2);
+    assert!(responses[0].success);
+    assert_eq!(responses[0].message_id.as_deref(), Some("projects/test-project/messages/1"));
+    assert!(!responses[1].success);
+    assert!(responses[1].error.is_some());
+}
+
+#[test]
+fn test_message_serialization_condition() {
+    let message = Message {
+        condition: Some("'foo' in topics && 'bar' in topics".to_string()),
+        notification: Some(Notification {
+            title: Some("Title".to_string()),
+            body: Some("Body".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let json = serde_json::to_value(&message).unwrap();
+    assert_eq!(json["condition"], "'foo' in topics && 'bar' in topics");
+    assert_eq!(json["notification"]["title"], "Title");
+    assert_eq!(json["notification"]["body"], "Body");
+}
