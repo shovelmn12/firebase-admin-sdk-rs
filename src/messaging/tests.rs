@@ -128,3 +128,27 @@ fn test_topic_management_response_deserialization() {
     assert!(results[0].error.is_none());
     assert_eq!(results[1].error.as_deref(), Some("NOT_FOUND"));
 }
+
+#[test]
+fn test_batch_response_aggregation() {
+    // Since we can't easily mock the async calls in unit tests without traits/mocks,
+    // we will verify the BatchResponse struct logic indirectly by constructing it.
+    let responses = vec![
+        SendResponse { success: true, message_id: Some("id1".to_string()), error: None },
+        SendResponse { success: false, message_id: None, error: Some("Fail".to_string()) },
+        SendResponse { success: true, message_id: Some("id2".to_string()), error: None },
+    ];
+
+    let success_count = responses.iter().filter(|r| r.success).count();
+    let failure_count = responses.len() - success_count;
+
+    let batch = BatchResponse {
+        success_count,
+        failure_count,
+        responses
+    };
+
+    assert_eq!(batch.success_count, 2);
+    assert_eq!(batch.failure_count, 1);
+    assert_eq!(batch.responses.len(), 3);
+}

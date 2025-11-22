@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::messaging::MessagingError;
 
 /// Represents a message to be sent via FCM.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -405,4 +406,23 @@ pub struct TopicManagementResponse {
 pub struct TopicManagementError {
     pub index: usize,
     pub reason: String,
+}
+
+/// Response from a batch send operation.
+#[derive(Debug, Clone, Default)]
+pub struct BatchResponse {
+    pub success_count: usize,
+    pub failure_count: usize,
+    pub responses: Vec<SendResponse>,
+}
+
+/// Response for an individual message in a batch.
+#[derive(Debug, Clone)]
+pub struct SendResponse {
+    pub success: bool,
+    pub message_id: Option<String>,
+    pub error: Option<String>, // Storing error string for simplicity, or reuse MessagingError?
+                               // Ideally wrap MessagingError, but MessagingError impls Error trait.
+                               // Let's store the error message or the error enum if it is cloneable (it's not easily).
+                               // Storing string is safer for now.
 }

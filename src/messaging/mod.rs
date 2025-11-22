@@ -2,11 +2,12 @@ use reqwest::{Client, header};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use crate::core::middleware::AuthMiddleware;
-use crate::messaging::models::{Message, TopicManagementResponse, TopicManagementError};
+use crate::messaging::models::{Message, TopicManagementResponse, TopicManagementError, BatchResponse, SendResponse};
 use thiserror::Error;
 use yup_oauth2::ServiceAccountKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use futures::{StreamExt, stream};
 
 pub mod models;
 #[cfg(test)]
@@ -31,7 +32,7 @@ pub struct FirebaseMessaging {
 }
 
 #[derive(Deserialize)]
-struct SendResponse {
+struct SendResponseInternal {
     name: String,
 }
 
@@ -104,8 +105,71 @@ impl FirebaseMessaging {
             return Err(MessagingError::ApiError(format!("FCM send failed {}: {}", status, text)));
         }
 
-        let result: SendResponse = response.json().await?;
+        let result: SendResponseInternal = response.json().await?;
         Ok(result.name)
+    }
+
+    pub async fn send_each(&self, messages: &[Message]) -> Result<BatchResponse, MessagingError> {
+        self.send_each_request(messages, false).await
+    }
+
+    pub async fn send_each_dry_run(&self, messages: &[Message]) -> Result<BatchResponse, MessagingError> {
+        self.send_each_request(messages, true).await
+    }
+
+    async fn send_each_request(&self, messages: &[Message], dry_run: bool) -> Result<BatchResponse, MessagingError> {
+        // Concurrency limit to prevent overwhelming the client or server
+        const CONCURRENCY_LIMIT: usize = 50;
+
+        let responses = stream::iter(messages)
+            .map(|message| {
+                let client = self.clone();
+                async move {
+                    match client.send_request(message, dry_run).await {
+                        Ok(id) => SendResponse {
+                            success: true,
+                            message_id: Some(id),
+                            error: None,
+                        },
+                        Err(e) => SendResponse {
+                            success: false,
+                            message_id: None,
+                            error: Some(e.to_string()),
+                        },
+                    }
+                }
+            })
+            // Use buffered instead of buffer_unordered to ensure the output order matches input order.
+            .buffered(CONCURRENCY_LIMIT)
+            .collect::<Vec<SendResponse>>()
+            .await;
+
+        let success_count = responses.iter().filter(|r| r.success).count();
+        let failure_count = responses.len() - success_count;
+
+        Ok(BatchResponse {
+            success_count,
+            failure_count,
+            responses,
+        })
+    }
+
+    pub async fn send_multicast(&self, message: &Message, tokens: &[&str]) -> Result<BatchResponse, MessagingError> {
+        self.send_multicast_request(message, tokens, false).await
+    }
+
+    pub async fn send_multicast_dry_run(&self, message: &Message, tokens: &[&str]) -> Result<BatchResponse, MessagingError> {
+        self.send_multicast_request(message, tokens, true).await
+    }
+
+    async fn send_multicast_request(&self, base_message: &Message, tokens: &[&str], dry_run: bool) -> Result<BatchResponse, MessagingError> {
+        let messages: Vec<Message> = tokens.iter().map(|token| {
+            let mut msg = base_message.clone();
+            msg.token = Some(token.to_string());
+            msg
+        }).collect();
+
+        self.send_each_request(&messages, dry_run).await
     }
 
     pub async fn subscribe_to_topic(&self, topic: &str, tokens: &[&str]) -> Result<TopicManagementResponse, MessagingError> {
