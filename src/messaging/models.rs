@@ -389,3 +389,20 @@ pub struct FcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
 }
+
+/// Response from the topic management APIs.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicManagementResponse {
+    pub success_count: usize,
+    pub failure_count: usize,
+    pub errors: Vec<TopicManagementError>,
+}
+
+/// Error details for a single registration token.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicManagementError {
+    pub index: usize,
+    pub reason: String,
+}

@@ -97,3 +97,34 @@ fn test_message_serialization_webpush() {
     // Fixed the key to camelCase "fcmOptions"
     assert_eq!(json["webpush"]["fcmOptions"]["link"], "https://example.com");
 }
+
+#[test]
+fn test_topic_management_serialization() {
+    let request = TopicManagementRequest {
+        to: "/topics/news".to_string(),
+        registration_tokens: &["token1", "token2"],
+    };
+
+    let json = serde_json::to_value(&request).unwrap();
+    assert_eq!(json["to"], "/topics/news");
+    let tokens = json["registration_tokens"].as_array().unwrap();
+    assert_eq!(tokens.len(), 2);
+    assert_eq!(tokens[0], "token1");
+}
+
+#[test]
+fn test_topic_management_response_deserialization() {
+    let json = json!({
+        "results": [
+            {},
+            {"error": "NOT_FOUND"},
+            {}
+        ]
+    });
+
+    let response: TopicManagementApiResponse = serde_json::from_value(json).unwrap();
+    let results = response.results.unwrap();
+    assert_eq!(results.len(), 3);
+    assert!(results[0].error.is_none());
+    assert_eq!(results[1].error.as_deref(), Some("NOT_FOUND"));
+}
