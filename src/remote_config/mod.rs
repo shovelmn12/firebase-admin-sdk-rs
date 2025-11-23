@@ -1,16 +1,17 @@
-use yup_oauth2::ServiceAccountKey;
-use reqwest_middleware::ClientWithMiddleware;
-
-use crate::core::http_client::create_client;
-
 pub mod models;
+
+use crate::core::middleware::AuthMiddleware;
+use crate::remote_config::models::RemoteConfig;
+use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
+use yup_oauth2::ServiceAccountKey;
 
 pub struct FirebaseRemoteConfig {
     client: ClientWithMiddleware,
     base_url: String,
 }
-
-use self::models::{RemoteConfig, Version};
 
 const REMOTE_CONFIG_V1_API: &str =
     "https://firebaseremoteconfig.googleapis.com/v1/projects/{project_id}/remoteConfig";
@@ -44,16 +45,18 @@ pub enum Error {
 }
 
 impl FirebaseRemoteConfig {
-    pub fn new(key: ServiceAccountKey) -> Result<Self, Error> {
-        let project_id = key.project_id.clone().ok_or(Error::ProjectIdMissing)?;
-        if project_id.is_empty() {
-            return Err(Error::ProjectIdMissing);
-        }
+    pub fn new(key: ServiceAccountKey) -> Self {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
-        let client = create_client(key);
+        let client = ClientBuilder::new(Client::new())
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .with(AuthMiddleware::new(key.clone()))
+            .build();
+
+        let project_id = key.project_id.unwrap_or_default();
         let base_url = REMOTE_CONFIG_V1_API.replace("{project_id}", &project_id);
 
-        Ok(Self { client, base_url })
+        Self { client, base_url }
     }
 
     async fn process_response<T: serde::de::DeserializeOwned>(
