@@ -3,10 +3,13 @@ use std::collections::HashMap;
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteConfig {
+    #[serde(default)]
     pub conditions: Vec<RemoteConfigCondition>,
+    #[serde(default)]
     pub parameters: HashMap<String, RemoteConfigParameter>,
     #[serde(default)]
     pub parameter_groups: HashMap<String, RemoteConfigParameterGroup>,
+    #[serde(skip)]
     pub etag: String,
     #[serde(default)]
     pub version: Option<Version>,
