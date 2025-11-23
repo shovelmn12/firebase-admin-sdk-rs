@@ -55,9 +55,7 @@ impl FirebaseRemoteConfig {
             .with(AuthMiddleware::new(key.clone()))
             .build();
 
-        let project_id = key
-            .project_id
-            .expect("Project ID is required for Remote Config");
+        let project_id = key.project_id.unwrap_or_default();
         let base_url = REMOTE_CONFIG_V1_API.replace("{project_id}", &project_id);
 
         Self { client, base_url }
