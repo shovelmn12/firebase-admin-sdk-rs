@@ -16,9 +16,6 @@ thiserror = "1.0"
 url = "2.5"
 anyhow = "1.0"
 async-trait = "0.1"
-# task-local-extensions = "0.1" # Removed as it's replaced by http::Extensions in new reqwest-middleware
-# hyper-rustls 0.24 is required because yup-oauth2 v8 uses it and we need to name the type.
-# reqwest 0.12 uses rustls 0.23/hyper 1.0, so they are separate.
 hyper-rustls = "0.24"
 hyper = "0.14"
 http = "1.0"
