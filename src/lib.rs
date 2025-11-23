@@ -1,7 +1,11 @@
 pub mod auth;
 pub mod core;
+pub mod messaging;
+pub mod firestore;
 
 use auth::FirebaseAuth;
+use messaging::FirebaseMessaging;
+use firestore::FirebaseFirestore;
 use yup_oauth2::ServiceAccountKey;
 
 pub struct FirebaseApp {
@@ -17,5 +21,13 @@ impl FirebaseApp {
 
     pub fn auth(&self) -> FirebaseAuth {
         FirebaseAuth::new(self.key.clone())
+    }
+
+    pub fn messaging(&self) -> FirebaseMessaging {
+        FirebaseMessaging::new(self.key.clone())
+    }
+
+    pub fn firestore(&self) -> FirebaseFirestore {
+        FirebaseFirestore::new(self.key.clone())
     }
 }
