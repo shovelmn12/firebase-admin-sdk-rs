@@ -7,7 +7,6 @@ use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use thiserror::Error;
-use yup_oauth2::ServiceAccountKey;
 
 const FIRESTORE_V1_API: &str =
     "https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents";
@@ -30,15 +29,15 @@ pub struct FirebaseFirestore {
 }
 
 impl FirebaseFirestore {
-    pub fn new(key: ServiceAccountKey) -> Self {
+    pub fn new(middleware: AuthMiddleware) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
         let client = ClientBuilder::new(Client::new())
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .with(AuthMiddleware::new(key.clone()))
+            .with(middleware.clone())
             .build();
 
-        let project_id = key.project_id.unwrap_or_default();
+        let project_id = middleware.key().project_id.clone().unwrap_or_default();
         let base_url = FIRESTORE_V1_API.replace("{project_id}", &project_id);
 
         Self { client, base_url }

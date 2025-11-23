@@ -18,7 +18,6 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use yup_oauth2::ServiceAccountKey;
 
 const AUTH_V1_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}";
 
@@ -66,18 +65,19 @@ pub struct FirebaseAuth {
     client: ClientWithMiddleware,
     base_url: String,
     verifier: Arc<IdTokenVerifier>,
-    service_account_key: Option<ServiceAccountKey>,
+    middleware: AuthMiddleware,
 }
 
 impl FirebaseAuth {
-    pub fn new(key: ServiceAccountKey) -> Self {
+    pub fn new(middleware: AuthMiddleware) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
         let client = ClientBuilder::new(Client::new())
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .with(AuthMiddleware::new(key.clone()))
+            .with(middleware.clone())
             .build();
 
+        let key = middleware.key();
         let project_id = key.project_id.clone().unwrap_or_default();
         let verifier = Arc::new(IdTokenVerifier::new(project_id.clone()));
         let base_url = AUTH_V1_API.replace("{project_id}", &project_id);
@@ -86,7 +86,7 @@ impl FirebaseAuth {
             client,
             base_url,
             verifier,
-            service_account_key: Some(key),
+            middleware,
         }
     }
 
@@ -106,10 +106,7 @@ impl FirebaseAuth {
         uid: &str,
         custom_claims: Option<serde_json::Map<String, serde_json::Value>>,
     ) -> Result<String, AuthError> {
-        let key = self
-            .service_account_key
-            .as_ref()
-            .ok_or(AuthError::ServiceAccountKeyRequired)?;
+        let key = self.middleware.key();
         let client_email = key.client_email.clone();
         let private_key = key.private_key.clone();
 
