@@ -1,3 +1,12 @@
+//! Firebase Remote Config module.
+//!
+//! This module provides functionality to read and modify the Remote Config template.
+//!
+//! # Optimistic Concurrency
+//!
+//! The `publish` method uses the ETag from the fetched configuration to ensure optimistic concurrency.
+//! If the remote configuration has changed since it was fetched, the publish operation will fail.
+
 pub mod models;
 
 use crate::core::middleware::AuthMiddleware;
@@ -8,6 +17,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use yup_oauth2::ServiceAccountKey;
 
+/// Client for interacting with Firebase Remote Config.
 pub struct FirebaseRemoteConfig {
     client: ClientWithMiddleware,
     base_url: String,
@@ -28,16 +38,22 @@ struct ErrorWrapper {
     error: ApiError,
 }
 
+/// Errors that can occur during Remote Config operations.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The service account key provided does not contain a project ID.
     #[error("the service account key is missing the project_id")]
     ProjectIdMissing,
+    /// Wrapper for `reqwest_middleware::Error`.
     #[error("an error occurred while sending the request: {0}")]
     Request(#[from] reqwest_middleware::Error),
+    /// Wrapper for `reqwest::Error`.
     #[error("an error occurred while sending the request: {0}")]
     Reqwest(#[from] reqwest::Error),
+    /// Wrapper for `serde_json::Error`.
     #[error("an error occurred while serializing/deserializing JSON: {0}")]
     Json(#[from] serde_json::Error),
+    /// Error returned by the Remote Config API.
     #[error("the firebase API returned an error: {code} {status}: {message}")]
     Api {
         code: u16,
@@ -47,6 +63,9 @@ pub enum Error {
 }
 
 impl FirebaseRemoteConfig {
+    /// Creates a new `FirebaseRemoteConfig` instance.
+    ///
+    /// This is typically called via `FirebaseApp::remote_config()`.
     pub fn new(key: ServiceAccountKey) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
@@ -99,6 +118,9 @@ impl FirebaseRemoteConfig {
         Ok((body, etag))
     }
 
+    /// Fetches the current active Remote Config template.
+    ///
+    /// The returned `RemoteConfig` object contains an ETag which is used for optimistic locking during updates.
     pub async fn get(&self) -> Result<RemoteConfig, Error> {
         let req = self.client.get(&self.base_url);
         let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
@@ -108,6 +130,14 @@ impl FirebaseRemoteConfig {
         Ok(config)
     }
 
+    /// Publishes a new Remote Config template.
+    ///
+    /// This method includes the `If-Match` header using the ETag present in the `config` object.
+    /// If the ETag does not match the server's current version, the request will fail.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The `RemoteConfig` template to publish.
     pub async fn publish(&self, config: RemoteConfig) -> Result<RemoteConfig, Error> {
         let req = self
             .client
@@ -121,6 +151,11 @@ impl FirebaseRemoteConfig {
         Ok(config)
     }
 
+    /// Lists previous versions of the Remote Config template.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - Optional query parameters for pagination and filtering.
     pub async fn list_versions(
         &self,
         options: Option<models::ListVersionsOptions>,
@@ -135,6 +170,11 @@ impl FirebaseRemoteConfig {
         self.process_response(response).await
     }
 
+    /// Rolls back the Remote Config template to a specific version.
+    ///
+    /// # Arguments
+    ///
+    /// * `version_number` - The version number to roll back to.
     pub async fn rollback(&self, version_number: String) -> Result<RemoteConfig, Error> {
         let url = format!("{}:rollback", self.base_url);
         let body = models::RollbackRequest { version_number };

@@ -1,3 +1,9 @@
+//! Firebase Authentication module.
+//!
+//! This module provides functionality for managing users (create, update, delete, list, get)
+//! and generating OOB (Out-of-Band) codes for email actions like password resets and email verification.
+//! It also includes ID token verification.
+
 pub mod keys;
 pub mod models;
 pub mod verifier;
@@ -25,30 +31,42 @@ const AUTH_V1_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{p
 #[cfg(test)]
 mod tests;
 
+/// Errors that can occur during Authentication operations.
 #[derive(Error, Debug)]
 pub enum AuthError {
+    /// Wrapper for `reqwest::Error`.
     #[error("HTTP Request failed: {0}")]
     RequestError(#[from] reqwest::Error),
+    /// Wrapper for `reqwest_middleware::Error`.
     #[error("Middleware error: {0}")]
     MiddlewareError(#[from] reqwest_middleware::Error),
+    /// Errors returned by the Identity Toolkit API.
     #[error("API error: {0}")]
     ApiError(String),
+    /// The requested user was not found.
     #[error("User not found")]
     UserNotFound,
+    /// Wrapper for `serde_json::Error`.
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
+    /// Error during ID token verification.
     #[error("Token verification error: {0}")]
     TokenVerificationError(#[from] TokenVerificationError),
+    /// Wrapper for `jsonwebtoken::errors::Error`.
     #[error("JWT error: {0}")]
     JwtError(#[from] jsonwebtoken::errors::Error),
+    /// The private key provided in the service account is invalid.
     #[error("Invalid private key")]
     InvalidPrivateKey,
+    /// A service account key is required for this operation (e.g., custom token signing) but was not provided.
     #[error("Service account key required for this operation")]
     ServiceAccountKeyRequired,
+    /// Errors occurred during a bulk import operation.
     #[error("Import users error: {0:?}")]
     ImportUsersError(Vec<models::ImportUserError>),
 }
 
+/// Claims used for generating custom tokens.
 #[derive(Debug, Serialize)]
 struct CustomTokenClaims {
     iss: String,
@@ -61,6 +79,7 @@ struct CustomTokenClaims {
     claims: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+/// Client for interacting with Firebase Authentication.
 #[derive(Clone)]
 pub struct FirebaseAuth {
     client: ClientWithMiddleware,
@@ -70,6 +89,9 @@ pub struct FirebaseAuth {
 }
 
 impl FirebaseAuth {
+    /// Creates a new `FirebaseAuth` instance.
+    ///
+    /// This is typically called via `FirebaseApp::auth()`.
     pub fn new(key: ServiceAccountKey) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
@@ -90,17 +112,26 @@ impl FirebaseAuth {
         }
     }
 
-    // Base URL for Identity Toolkit API
-    // fn base_url(&self) -> String {
-    //     "https://identitytoolkit.googleapis.com/v1/projects".to_string()
-    // }
-
     /// Verifies a Firebase ID token.
+    ///
+    /// This method fetches Google's public keys (caching them respecting Cache-Control)
+    /// and verifies the signature, audience, issuer, and expiration of the token.
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - The JWT ID token string.
     pub async fn verify_id_token(&self, token: &str) -> Result<FirebaseTokenClaims, AuthError> {
         Ok(self.verifier.verify_token(token).await?)
     }
 
     /// Creates a custom token for the given UID with optional custom claims.
+    ///
+    /// This token can be sent to a client application to sign in with `signInWithCustomToken`.
+    ///
+    /// # Arguments
+    ///
+    /// * `uid` - The unique identifier for the user.
+    /// * `custom_claims` - Optional JSON object containing custom claims.
     pub fn create_custom_token(
         &self,
         uid: &str,
@@ -137,6 +168,7 @@ impl FirebaseAuth {
         Ok(token)
     }
 
+    /// Internal helper to generate OOB (Out-of-Band) email links.
     async fn generate_email_link(
         &self,
         request_type: &str,
@@ -181,6 +213,7 @@ impl FirebaseAuth {
         Ok(result.oob_link)
     }
 
+    /// Generates a link for password reset.
     pub async fn generate_password_reset_link(
         &self,
         email: &str,
@@ -190,6 +223,7 @@ impl FirebaseAuth {
             .await
     }
 
+    /// Generates a link for email verification.
     pub async fn generate_email_verification_link(
         &self,
         email: &str,
@@ -199,6 +233,7 @@ impl FirebaseAuth {
             .await
     }
 
+    /// Generates a link for sign-in with email.
     pub async fn generate_sign_in_with_email_link(
         &self,
         email: &str,
@@ -208,6 +243,11 @@ impl FirebaseAuth {
             .await
     }
 
+    /// Imports users in bulk.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - An `ImportUsersRequest` containing the list of users and hashing algorithm configuration.
     pub async fn import_users(
         &self,
         request: ImportUsersRequest,
@@ -255,6 +295,7 @@ impl FirebaseAuth {
         Ok(result)
     }
 
+    /// Creates a new user.
     pub async fn create_user(&self, request: CreateUserRequest) -> Result<UserRecord, AuthError> {
         let url = format!("{}/accounts", self.base_url);
 
@@ -279,6 +320,7 @@ impl FirebaseAuth {
         Ok(user)
     }
 
+    /// Updates an existing user.
     pub async fn update_user(&self, request: UpdateUserRequest) -> Result<UserRecord, AuthError> {
         let url = format!("{}/accounts:update", self.base_url);
 
@@ -303,6 +345,7 @@ impl FirebaseAuth {
         Ok(user)
     }
 
+    /// Deletes a user by UID.
     pub async fn delete_user(&self, uid: &str) -> Result<(), AuthError> {
         let url = format!("{}/accounts:delete", self.base_url);
         let request = DeleteAccountRequest {
@@ -329,7 +372,7 @@ impl FirebaseAuth {
         Ok(())
     }
 
-    // Helper to get account info
+    /// Internal helper to get account info.
     async fn get_account_info(
         &self,
         request: GetAccountInfoRequest,
@@ -361,6 +404,7 @@ impl FirebaseAuth {
             .ok_or(AuthError::UserNotFound)
     }
 
+    /// Retrieves a user by their UID.
     pub async fn get_user(&self, uid: &str) -> Result<UserRecord, AuthError> {
         let request = GetAccountInfoRequest {
             local_id: Some(vec![uid.to_string()]),
@@ -370,6 +414,7 @@ impl FirebaseAuth {
         self.get_account_info(request).await
     }
 
+    /// Retrieves a user by their email.
     pub async fn get_user_by_email(&self, email: &str) -> Result<UserRecord, AuthError> {
         let request = GetAccountInfoRequest {
             local_id: None,
@@ -379,6 +424,7 @@ impl FirebaseAuth {
         self.get_account_info(request).await
     }
 
+    /// Retrieves a user by their phone number.
     pub async fn get_user_by_phone_number(&self, phone: &str) -> Result<UserRecord, AuthError> {
         let request = GetAccountInfoRequest {
             local_id: None,
@@ -388,6 +434,12 @@ impl FirebaseAuth {
         self.get_account_info(request).await
     }
 
+    /// Lists users.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_results` - The maximum number of users to return.
+    /// * `page_token` - The next page token from a previous response.
     pub async fn list_users(
         &self,
         max_results: u32,
