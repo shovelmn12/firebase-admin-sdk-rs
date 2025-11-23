@@ -9,6 +9,9 @@ use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use thiserror::Error;
 use yup_oauth2::ServiceAccountKey;
 
+const FIRESTORE_V1_API: &str =
+    "https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents";
+
 #[derive(Error, Debug)]
 pub enum FirestoreError {
     #[error("HTTP Request failed: {0}")]
@@ -23,44 +26,35 @@ pub enum FirestoreError {
 
 pub struct FirebaseFirestore {
     client: ClientWithMiddleware,
-    project_id: String,
+    base_url: String,
 }
 
 impl FirebaseFirestore {
-    pub fn new(service_account_key: ServiceAccountKey) -> Self {
+    pub fn new(key: ServiceAccountKey) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
         let client = ClientBuilder::new(Client::new())
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .with(AuthMiddleware::new(service_account_key.clone()))
+            .with(AuthMiddleware::new(key.clone()))
             .build();
 
-        let project_id = service_account_key.project_id.clone().unwrap_or_default();
+        let project_id = key.project_id.unwrap_or_default();
+        let base_url = FIRESTORE_V1_API.replace("{project_id}", &project_id);
 
-        Self {
-            client,
-            project_id,
-        }
-    }
-
-    fn base_url(&self) -> String {
-        format!(
-            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents",
-            self.project_id
-        )
+        Self { client, base_url }
     }
 
     pub fn collection<'a>(&'a self, collection_id: &str) -> CollectionReference<'a> {
         CollectionReference {
             client: &self.client,
-            path: format!("{}/{}", self.base_url(), collection_id),
+            path: format!("{}/{}", self.base_url, collection_id),
         }
     }
 
     pub fn doc<'a>(&'a self, document_path: &str) -> DocumentReference<'a> {
         DocumentReference {
             client: &self.client,
-            path: format!("{}/{}", self.base_url(), document_path),
+            path: format!("{}/{}", self.base_url, document_path),
         }
     }
 }

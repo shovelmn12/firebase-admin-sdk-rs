@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod core;
+pub mod firestore;
 pub mod messaging;
 pub mod remote_config;
 
@@ -29,11 +30,7 @@ impl FirebaseApp {
     }
 
     pub fn remote_config(&self) -> FirebaseRemoteConfig {
-        // The remote_config client requires a project_id. If it's missing, the SDK cannot
-        // configuration error.
-        FirebaseRemoteConfig::new(self.key.clone()).expect(
-            "failed to create RemoteConfig client: project_id is missing from service account key",
-        )
+        FirebaseRemoteConfig::new(self.key.clone())
     }
 
     pub fn firestore(&self) -> FirebaseFirestore {

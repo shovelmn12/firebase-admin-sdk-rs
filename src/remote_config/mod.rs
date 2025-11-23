@@ -1,16 +1,17 @@
-use yup_oauth2::ServiceAccountKey;
-use reqwest_middleware::ClientWithMiddleware;
-
-use crate::core::http_client::create_client;
-
 pub mod models;
+
+use crate::core::middleware::AuthMiddleware;
+use crate::remote_config::models::RemoteConfig;
+use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
+use yup_oauth2::ServiceAccountKey;
 
 pub struct FirebaseRemoteConfig {
     client: ClientWithMiddleware,
     base_url: String,
 }
-
-use self::models::{RemoteConfig, Version};
 
 const REMOTE_CONFIG_V1_API: &str =
     "https://firebaseremoteconfig.googleapis.com/v1/projects/{project_id}/remoteConfig";
@@ -33,6 +34,8 @@ pub enum Error {
     ProjectIdMissing,
     #[error("an error occurred while sending the request: {0}")]
     Request(#[from] reqwest_middleware::Error),
+    #[error("an error occurred while sending the request: {0}")]
+    Reqwest(#[from] reqwest::Error),
     #[error("an error occurred while serializing/deserializing JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("the firebase API returned an error: {code} {status}: {message}")]
@@ -44,16 +47,18 @@ pub enum Error {
 }
 
 impl FirebaseRemoteConfig {
-    pub fn new(key: ServiceAccountKey) -> Result<Self, Error> {
-        let project_id = key.project_id.clone().ok_or(Error::ProjectIdMissing)?;
-        if project_id.is_empty() {
-            return Err(Error::ProjectIdMissing);
-        }
+    pub fn new(key: ServiceAccountKey) -> Self {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
-        let client = create_client(key);
+        let client = ClientBuilder::new(Client::new())
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .with(AuthMiddleware::new(key.clone()))
+            .build();
+
+        let project_id = key.project_id.unwrap_or_default();
         let base_url = REMOTE_CONFIG_V1_API.replace("{project_id}", &project_id);
 
-        Ok(Self { client, base_url })
+        Self { client, base_url }
     }
 
     async fn process_response<T: serde::de::DeserializeOwned>(
@@ -72,20 +77,48 @@ impl FirebaseRemoteConfig {
         }
     }
 
+    async fn request<T: serde::de::DeserializeOwned>(
+        &self,
+        req: reqwest_middleware::RequestBuilder,
+    ) -> Result<(T, Option<String>), Error> {
+        let response = req.send().await?;
+        if !response.status().is_success() {
+            let error: ErrorWrapper = response.json().await?;
+            return Err(Error::Api {
+                code: error.error.code,
+                message: error.error.message,
+                status: error.error.status,
+            });
+        }
+        let etag = response
+            .headers()
+            .get("ETag")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let body: T = response.json().await?;
+        Ok((body, etag))
+    }
+
     pub async fn get(&self) -> Result<RemoteConfig, Error> {
-        let response = self.client.get(&self.base_url).send().await?;
-        self.process_response(response).await
+        let req = self.client.get(&self.base_url);
+        let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
+        if let Some(e) = etag {
+            config.etag = e;
+        }
+        Ok(config)
     }
 
     pub async fn publish(&self, config: RemoteConfig) -> Result<RemoteConfig, Error> {
-        let response = self
+        let req = self
             .client
             .put(&self.base_url)
             .header("If-Match", config.etag.clone())
-            .json(&config)
-            .send()
-            .await?;
-        self.process_response(response).await
+            .json(&config);
+        let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
+        if let Some(e) = etag {
+            config.etag = e;
+        }
+        Ok(config)
     }
 
     pub async fn list_versions(
@@ -106,7 +139,11 @@ impl FirebaseRemoteConfig {
         let url = format!("{}:rollback", self.base_url);
         let body = models::RollbackRequest { version_number };
 
-        let response = self.client.post(url).json(&body).send().await?;
-        self.process_response(response).await
+        let req = self.client.post(url).json(&body);
+        let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
+        if let Some(e) = etag {
+            config.etag = e;
+        }
+        Ok(config)
     }
 }
