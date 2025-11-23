@@ -77,7 +77,7 @@ impl FirebaseAuth {
             .with(middleware.clone())
             .build();
 
-        let key = middleware.key();
+        let key = &middleware.key;
         let project_id = key.project_id.clone().unwrap_or_default();
         let verifier = Arc::new(IdTokenVerifier::new(project_id.clone()));
         let base_url = AUTH_V1_API.replace("{project_id}", &project_id);
@@ -106,7 +106,7 @@ impl FirebaseAuth {
         uid: &str,
         custom_claims: Option<serde_json::Map<String, serde_json::Value>>,
     ) -> Result<String, AuthError> {
-        let key = self.middleware.key();
+        let key = &self.middleware.key;
         let client_email = key.client_email.clone();
         let private_key = key.private_key.clone();
 

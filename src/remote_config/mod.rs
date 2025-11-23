@@ -54,7 +54,7 @@ impl FirebaseRemoteConfig {
             .with(middleware.clone())
             .build();
 
-        let project_id = middleware.key().project_id.clone().unwrap_or_default();
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
         let base_url = REMOTE_CONFIG_V1_API.replace("{project_id}", &project_id);
 
         Self { client, base_url }

@@ -62,7 +62,7 @@ impl FirebaseMessaging {
             .with(middleware.clone())
             .build();
 
-        let project_id = middleware.key().project_id.clone().unwrap_or_default();
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
 
         Self {
             client,

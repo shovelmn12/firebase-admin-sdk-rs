@@ -12,33 +12,24 @@ use std::sync::Arc;
 // In yup-oauth2 v8 it returns Authenticator<HttpsConnector<HttpConnector>> using hyper 0.14 / hyper-rustls 0.24.
 type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 
-struct AuthMiddlewareState {
-    key: ServiceAccountKey,
-    authenticator: OnceCell<AuthType>,
-}
-
 #[derive(Clone)]
 pub struct AuthMiddleware {
-    state: Arc<AuthMiddlewareState>,
+    pub key: ServiceAccountKey,
+    authenticator: Arc<OnceCell<AuthType>>,
 }
 
 impl AuthMiddleware {
     pub fn new(key: ServiceAccountKey) -> Self {
         Self {
-            state: Arc::new(AuthMiddlewareState {
-                key,
-                authenticator: OnceCell::new(),
-            }),
+            key,
+            authenticator: Arc::new(OnceCell::new()),
         }
     }
 
-    pub fn key(&self) -> &ServiceAccountKey {
-        &self.state.key
-    }
-
     async fn get_token(&self) -> Result<String, anyhow::Error> {
-        let auth = self.state.authenticator.get_or_try_init(|| async {
-            ServiceAccountAuthenticator::builder(self.state.key.clone())
+        let key = self.key.clone();
+        let auth = self.authenticator.get_or_try_init(|| async move {
+            ServiceAccountAuthenticator::builder(key)
                 .build()
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
