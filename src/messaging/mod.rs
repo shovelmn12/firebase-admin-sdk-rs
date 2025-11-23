@@ -4,7 +4,6 @@ use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use crate::core::middleware::AuthMiddleware;
 use crate::messaging::models::{Message, TopicManagementResponse, TopicManagementError, BatchResponse, SendResponse, SendResponseInternal};
 use thiserror::Error;
-use yup_oauth2::ServiceAccountKey;
 use serde::{Deserialize, Serialize};
 
 pub mod models;
@@ -55,15 +54,15 @@ struct TopicManagementApiResult {
 }
 
 impl FirebaseMessaging {
-    pub fn new(service_account_key: ServiceAccountKey) -> Self {
+    pub fn new(middleware: AuthMiddleware) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
         let client = ClientBuilder::new(Client::new())
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .with(AuthMiddleware::new(service_account_key.clone()))
+            .with(middleware.clone())
             .build();
 
-        let project_id = service_account_key.project_id.unwrap_or_default();
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
 
         Self {
             client,

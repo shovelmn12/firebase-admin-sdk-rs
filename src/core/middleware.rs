@@ -6,27 +6,30 @@ use yup_oauth2::authenticator::Authenticator;
 use hyper_rustls::HttpsConnector;
 use hyper::client::HttpConnector;
 use http::Extensions;
+use std::sync::Arc;
 
 // The type returned by ServiceAccountAuthenticator::builder(...).build().await
 // In yup-oauth2 v8 it returns Authenticator<HttpsConnector<HttpConnector>> using hyper 0.14 / hyper-rustls 0.24.
 type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 
+#[derive(Clone)]
 pub struct AuthMiddleware {
-    key: ServiceAccountKey,
-    authenticator: OnceCell<AuthType>,
+    pub key: ServiceAccountKey,
+    authenticator: Arc<OnceCell<AuthType>>,
 }
 
 impl AuthMiddleware {
     pub fn new(key: ServiceAccountKey) -> Self {
         Self {
             key,
-            authenticator: OnceCell::new(),
+            authenticator: Arc::new(OnceCell::new()),
         }
     }
 
     async fn get_token(&self) -> Result<String, anyhow::Error> {
-        let auth = self.authenticator.get_or_try_init(|| async {
-            ServiceAccountAuthenticator::builder(self.key.clone())
+        let key = self.key.clone();
+        let auth = self.authenticator.get_or_try_init(|| async move {
+            ServiceAccountAuthenticator::builder(key)
                 .build()
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
