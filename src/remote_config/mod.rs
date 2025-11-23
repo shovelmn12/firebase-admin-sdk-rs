@@ -34,6 +34,8 @@ pub enum Error {
     ProjectIdMissing,
     #[error("an error occurred while sending the request: {0}")]
     Request(#[from] reqwest_middleware::Error),
+    #[error("an error occurred while sending the request: {0}")]
+    Reqwest(#[from] reqwest::Error),
     #[error("an error occurred while serializing/deserializing JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("the firebase API returned an error: {code} {status}: {message}")]
@@ -75,20 +77,48 @@ impl FirebaseRemoteConfig {
         }
     }
 
+    async fn request<T: serde::de::DeserializeOwned>(
+        &self,
+        req: reqwest_middleware::RequestBuilder,
+    ) -> Result<(T, Option<String>), Error> {
+        let response = req.send().await?;
+        if !response.status().is_success() {
+            let error: ErrorWrapper = response.json().await?;
+            return Err(Error::Api {
+                code: error.error.code,
+                message: error.error.message,
+                status: error.error.status,
+            });
+        }
+        let etag = response
+            .headers()
+            .get("ETag")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let body: T = response.json().await?;
+        Ok((body, etag))
+    }
+
     pub async fn get(&self) -> Result<RemoteConfig, Error> {
-        let response = self.client.get(&self.base_url).send().await?;
-        self.process_response(response).await
+        let req = self.client.get(&self.base_url);
+        let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
+        if let Some(e) = etag {
+            config.etag = e;
+        }
+        Ok(config)
     }
 
     pub async fn publish(&self, config: RemoteConfig) -> Result<RemoteConfig, Error> {
-        let response = self
+        let req = self
             .client
             .put(&self.base_url)
             .header("If-Match", config.etag.clone())
-            .json(&config)
-            .send()
-            .await?;
-        self.process_response(response).await
+            .json(&config);
+        let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
+        if let Some(e) = etag {
+            config.etag = e;
+        }
+        Ok(config)
     }
 
     pub async fn list_versions(
@@ -109,7 +139,11 @@ impl FirebaseRemoteConfig {
         let url = format!("{}:rollback", self.base_url);
         let body = models::RollbackRequest { version_number };
 
-        let response = self.client.post(url).json(&body).send().await?;
-        self.process_response(response).await
+        let req = self.client.post(url).json(&body);
+        let (mut config, etag) = self.request::<RemoteConfig>(req).await?;
+        if let Some(e) = etag {
+            config.etag = e;
+        }
+        Ok(config)
     }
 }
