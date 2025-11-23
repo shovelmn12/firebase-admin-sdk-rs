@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::messaging::MessagingError;
 
 /// Represents a message to be sent via FCM.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -425,4 +424,9 @@ pub struct SendResponse {
                                // Ideally wrap MessagingError, but MessagingError impls Error trait.
                                // Let's store the error message or the error enum if it is cloneable (it's not easily).
                                // Storing string is safer for now.
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SendResponseInternal {
+    pub name: String,
 }

@@ -1,11 +1,12 @@
 pub mod auth;
 pub mod core;
 pub mod messaging;
-pub mod firestore;
+pub mod remote_config;
 
 use auth::FirebaseAuth;
-use messaging::FirebaseMessaging;
 use firestore::FirebaseFirestore;
+use messaging::FirebaseMessaging;
+use remote_config::FirebaseRemoteConfig;
 use yup_oauth2::ServiceAccountKey;
 
 pub struct FirebaseApp {
@@ -25,6 +26,14 @@ impl FirebaseApp {
 
     pub fn messaging(&self) -> FirebaseMessaging {
         FirebaseMessaging::new(self.key.clone())
+    }
+
+    pub fn remote_config(&self) -> FirebaseRemoteConfig {
+        // The remote_config client requires a project_id. If it's missing, the SDK cannot
+        // configuration error.
+        FirebaseRemoteConfig::new(self.key.clone()).expect(
+            "failed to create RemoteConfig client: project_id is missing from service account key",
+        )
     }
 
     pub fn firestore(&self) -> FirebaseFirestore {
