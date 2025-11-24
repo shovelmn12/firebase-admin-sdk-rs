@@ -15,7 +15,6 @@ use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use yup_oauth2::ServiceAccountKey;
 
 /// Client for interacting with Firebase Remote Config.
 pub struct FirebaseRemoteConfig {
@@ -66,15 +65,15 @@ impl FirebaseRemoteConfig {
     /// Creates a new `FirebaseRemoteConfig` instance.
     ///
     /// This is typically called via `FirebaseApp::remote_config()`.
-    pub fn new(key: ServiceAccountKey) -> Self {
+    pub fn new(middleware: AuthMiddleware) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
         let client = ClientBuilder::new(Client::new())
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-            .with(AuthMiddleware::new(key.clone()))
+            .with(middleware.clone())
             .build();
 
-        let project_id = key.project_id.unwrap_or_default();
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
         let base_url = REMOTE_CONFIG_V1_API.replace("{project_id}", &project_id);
 
         Self { client, base_url }
