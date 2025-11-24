@@ -37,6 +37,7 @@ pub mod remote_config;
 pub use yup_oauth2;
 
 use auth::FirebaseAuth;
+use core::middleware::AuthMiddleware;
 use firestore::FirebaseFirestore;
 use messaging::FirebaseMessaging;
 use remote_config::FirebaseRemoteConfig;
@@ -51,7 +52,7 @@ use yup_oauth2::ServiceAccountKey;
 /// The `new` method is synchronous and cheap, while the actual OAuth2 authentication
 /// happens asynchronously and lazily upon the first API request made by any service client.
 pub struct FirebaseApp {
-    key: ServiceAccountKey,
+    middleware: AuthMiddleware,
 }
 
 impl FirebaseApp {
@@ -65,27 +66,27 @@ impl FirebaseApp {
     /// * `service_account_key` - A `yup_oauth2::ServiceAccountKey` struct containing the credentials.
     pub fn new(service_account_key: ServiceAccountKey) -> Self {
         Self {
-            key: service_account_key,
+            middleware: AuthMiddleware::new(service_account_key),
         }
     }
 
     /// Returns a client for interacting with Firebase Authentication.
     pub fn auth(&self) -> FirebaseAuth {
-        FirebaseAuth::new(self.key.clone())
+        FirebaseAuth::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Firebase Cloud Messaging (FCM).
     pub fn messaging(&self) -> FirebaseMessaging {
-        FirebaseMessaging::new(self.key.clone())
+        FirebaseMessaging::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Firebase Remote Config.
     pub fn remote_config(&self) -> FirebaseRemoteConfig {
-        FirebaseRemoteConfig::new(self.key.clone())
+        FirebaseRemoteConfig::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Cloud Firestore.
     pub fn firestore(&self) -> FirebaseFirestore {
-        FirebaseFirestore::new(self.key.clone())
+        FirebaseFirestore::new(self.middleware.clone())
     }
 }

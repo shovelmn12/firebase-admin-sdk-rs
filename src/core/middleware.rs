@@ -6,6 +6,7 @@ use yup_oauth2::authenticator::Authenticator;
 use hyper_rustls::HttpsConnector;
 use hyper::client::HttpConnector;
 use http::Extensions;
+use std::sync::Arc;
 
 /// The concrete type of the Authenticator used by `yup-oauth2`.
 ///
@@ -22,11 +23,12 @@ type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 ///
 /// The `Authenticator` is initialized lazily using `tokio::sync::OnceCell` upon the first request.
 /// This allows the `FirebaseApp` constructor to remain synchronous.
+#[derive(Clone)]
 pub struct AuthMiddleware {
     /// The service account key used to create the authenticator.
-    key: ServiceAccountKey,
+    pub key: ServiceAccountKey,
     /// A lazy-initialized authenticator instance.
-    authenticator: OnceCell<AuthType>,
+    authenticator: Arc<OnceCell<AuthType>>,
 }
 
 impl AuthMiddleware {
@@ -38,14 +40,15 @@ impl AuthMiddleware {
     pub fn new(key: ServiceAccountKey) -> Self {
         Self {
             key,
-            authenticator: OnceCell::new(),
+            authenticator: Arc::new(OnceCell::new()),
         }
     }
 
     /// Retrieves a valid OAuth2 token, initializing the authenticator if necessary.
     async fn get_token(&self) -> Result<String, anyhow::Error> {
-        let auth = self.authenticator.get_or_try_init(|| async {
-            ServiceAccountAuthenticator::builder(self.key.clone())
+        let key = self.key.clone();
+        let auth = self.authenticator.get_or_try_init(|| async move {
+            ServiceAccountAuthenticator::builder(key)
                 .build()
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
