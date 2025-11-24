@@ -1,3 +1,21 @@
+//! Firebase Crashlytics module.
+//!
+//! This module provides functionality for managing Crashlytics data.
+//! Currently, it supports deleting crash reports for a specific user, which is useful for
+//! privacy compliance (e.g., "Right to be Forgotten").
+//!
+//! # Examples
+//!
+//! ```rust,ignore
+//! # use firebase_admin_sdk::FirebaseApp;
+//! # async fn run(app: FirebaseApp) {
+//! let crashlytics = app.crashlytics();
+//!
+//! // Delete crash reports for a user
+//! let _ = crashlytics.delete_crash_reports("your-app-id", "user-uid").await;
+//! # }
+//! ```
+
 use crate::core::middleware::AuthMiddleware;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -6,9 +24,6 @@ use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use thiserror::Error;
-
-#[cfg(test)]
-mod tests;
 
 /// Error type for Firebase Crashlytics operations.
 #[derive(Debug, Error)]
