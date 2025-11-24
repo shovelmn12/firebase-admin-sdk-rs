@@ -1,3 +1,30 @@
+//! Firebase Cloud Messaging (FCM) module.
+//!
+//! This module provides functionality for sending messages via FCM (single, batch, multicast)
+//! and managing topic subscriptions.
+//!
+//! # Examples
+//!
+//! ```rust,no_run
+//! use firebase_admin_sdk::messaging::models::{Message, Notification};
+//! # use firebase_admin_sdk::FirebaseApp;
+//! # async fn run(app: FirebaseApp) {
+//! let messaging = app.messaging();
+//!
+//! let message = Message {
+//!     token: Some("device_token".to_string()),
+//!     notification: Some(Notification {
+//!         title: Some("Title".to_string()),
+//!         body: Some("Body".to_string()),
+//!         ..Default::default()
+//!     }),
+//!     ..Default::default()
+//! };
+//!
+//! let result = messaging.send(&message).await;
+//! # }
+//! ```
+
 use reqwest::{Client, header};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
@@ -10,20 +37,27 @@ pub mod models;
 #[cfg(test)]
 mod tests;
 
+/// Errors that can occur during Messaging operations.
 #[derive(Error, Debug)]
 pub enum MessagingError {
+    /// Wrapper for `reqwest::Error`.
     #[error("HTTP Request failed: {0}")]
     RequestError(#[from] reqwest::Error),
+    /// Wrapper for `reqwest_middleware::Error`.
     #[error("Middleware error: {0}")]
     MiddlewareError(#[from] reqwest_middleware::Error),
+    /// Errors returned by the FCM API.
     #[error("API error: {0}")]
     ApiError(String),
+    /// Wrapper for `serde_json::Error`.
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
+    /// Error parsing multipart responses for batch requests.
     #[error("Multipart response parsing error: {0}")]
     MultipartError(String),
 }
 
+/// Client for interacting with Firebase Cloud Messaging.
 #[derive(Clone)]
 pub struct FirebaseMessaging {
     client: ClientWithMiddleware,
@@ -54,6 +88,9 @@ struct TopicManagementApiResult {
 }
 
 impl FirebaseMessaging {
+    /// Creates a new `FirebaseMessaging` instance.
+    ///
+    /// This is typically called via `FirebaseApp::messaging()`.
     pub fn new(middleware: AuthMiddleware) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
@@ -70,16 +107,23 @@ impl FirebaseMessaging {
         }
     }
 
+    /// Sends a message to a specific target (token, topic, or condition).
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The `Message` struct defining the payload and target.
     pub async fn send(&self, message: &Message) -> Result<String, MessagingError> {
         self.validate_message(message)?;
         self.send_request(message, false).await
     }
 
+    /// Validates a message without actually sending it.
     pub async fn send_dry_run(&self, message: &Message) -> Result<String, MessagingError> {
         self.validate_message(message)?;
         self.send_request(message, true).await
     }
 
+    /// Validates that the message has exactly one target.
     fn validate_message(&self, message: &Message) -> Result<(), MessagingError> {
         let num_targets = [
             message.token.is_some(),
@@ -99,6 +143,7 @@ impl FirebaseMessaging {
         Ok(())
     }
 
+    /// Internal method to send the HTTP request.
     async fn send_request(&self, message: &Message, dry_run: bool) -> Result<String, MessagingError> {
         let url = format!("https://fcm.googleapis.com/v1/projects/{}/messages:send", self.project_id);
 
@@ -124,6 +169,13 @@ impl FirebaseMessaging {
         Ok(result.name)
     }
 
+    /// Sends a batch of messages.
+    ///
+    /// This uses the FCM batch endpoint to send up to 500 messages in a single HTTP request.
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - A slice of `Message` structs.
     pub async fn send_each(&self, messages: &[Message]) -> Result<BatchResponse, MessagingError> {
         for message in messages {
             self.validate_message(message)?;
@@ -131,6 +183,7 @@ impl FirebaseMessaging {
         self.send_each_request(messages, false).await
     }
 
+    /// Sends a batch of messages in dry-run mode (validation only).
     pub async fn send_each_dry_run(&self, messages: &[Message]) -> Result<BatchResponse, MessagingError> {
         for message in messages {
             self.validate_message(message)?;
@@ -272,10 +325,19 @@ impl FirebaseMessaging {
         Ok(responses)
     }
 
+    /// Sends a message to multiple recipients.
+    ///
+    /// This is a wrapper around `send_each` that constructs individual messages for each token.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The base message to send (must not have `token`, `topic`, or `condition` set).
+    /// * `tokens` - A list of device tokens to send to.
     pub async fn send_multicast(&self, message: &Message, tokens: &[&str]) -> Result<BatchResponse, MessagingError> {
         self.send_multicast_request(message, tokens, false).await
     }
 
+    /// Sends a multicast message in dry-run mode.
     pub async fn send_multicast_dry_run(&self, message: &Message, tokens: &[&str]) -> Result<BatchResponse, MessagingError> {
         self.send_multicast_request(message, tokens, true).await
     }
@@ -296,10 +358,22 @@ impl FirebaseMessaging {
         self.send_each_request(&messages, dry_run).await
     }
 
+    /// Subscribes a list of tokens to a topic.
+    ///
+    /// # Arguments
+    ///
+    /// * `topic` - The name of the topic.
+    /// * `tokens` - A list of device registration tokens.
     pub async fn subscribe_to_topic(&self, topic: &str, tokens: &[&str]) -> Result<TopicManagementResponse, MessagingError> {
         self.manage_topic(topic, tokens, true).await
     }
 
+    /// Unsubscribes a list of tokens from a topic.
+    ///
+    /// # Arguments
+    ///
+    /// * `topic` - The name of the topic.
+    /// * `tokens` - A list of device registration tokens.
     pub async fn unsubscribe_from_topic(&self, topic: &str, tokens: &[&str]) -> Result<TopicManagementResponse, MessagingError> {
         self.manage_topic(topic, tokens, false).await
     }

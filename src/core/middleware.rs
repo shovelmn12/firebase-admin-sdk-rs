@@ -8,17 +8,35 @@ use hyper::client::HttpConnector;
 use http::Extensions;
 use std::sync::Arc;
 
-// The type returned by ServiceAccountAuthenticator::builder(...).build().await
-// In yup-oauth2 v8 it returns Authenticator<HttpsConnector<HttpConnector>> using hyper 0.14 / hyper-rustls 0.24.
+/// The concrete type of the Authenticator used by `yup-oauth2`.
+///
+/// In `yup-oauth2` v8 (which relies on `hyper` 0.14), the `Authenticator` is generic over the connector.
+/// We use `hyper_rustls` to provide the HTTPS connector.
 type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 
+/// A middleware that handles OAuth2 authentication for Firebase requests.
+///
+/// This middleware intercepts outgoing requests, obtains a valid OAuth2 Bearer token
+/// using the service account credentials, and injects it into the `Authorization` header.
+///
+/// # Lazy Initialization
+///
+/// The `Authenticator` is initialized lazily using `tokio::sync::OnceCell` upon the first request.
+/// This allows the `FirebaseApp` constructor to remain synchronous.
 #[derive(Clone)]
 pub struct AuthMiddleware {
+    /// The service account key used to create the authenticator.
     pub key: ServiceAccountKey,
+    /// A lazy-initialized authenticator instance.
     authenticator: Arc<OnceCell<AuthType>>,
 }
 
 impl AuthMiddleware {
+    /// Creates a new `AuthMiddleware` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The service account credentials.
     pub fn new(key: ServiceAccountKey) -> Self {
         Self {
             key,
@@ -26,6 +44,7 @@ impl AuthMiddleware {
         }
     }
 
+    /// Retrieves a valid OAuth2 token, initializing the authenticator if necessary.
     async fn get_token(&self) -> Result<String, anyhow::Error> {
         let key = self.key.clone();
         let auth = self.authenticator.get_or_try_init(|| async move {
@@ -45,6 +64,7 @@ impl AuthMiddleware {
 
 #[async_trait::async_trait]
 impl Middleware for AuthMiddleware {
+    /// Intercepts the request to add the Authorization header.
     async fn handle(
         &self,
         mut req: Request,
