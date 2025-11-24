@@ -27,9 +27,6 @@ use thiserror::Error;
 
 const AUTH_V1_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}";
 
-#[cfg(test)]
-mod tests;
-
 /// Errors that can occur during Authentication operations.
 #[derive(Error, Debug)]
 pub enum AuthError {

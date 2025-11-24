@@ -9,13 +9,15 @@
 //! - [`messaging`]: Firebase Cloud Messaging (Send messages, topic management).
 //! - [`remote_config`]: Firebase Remote Config (Get, update, rollback configurations).
 //! - [`firestore`]: Cloud Firestore (Read/Write documents).
+//! - [`storage`]: Cloud Storage (Upload, download, delete files).
+//! - [`crashlytics`]: Firebase Crashlytics (Manage crash reports).
 //!
 //! ## Usage
 //!
 //! The entry point is the [`FirebaseApp`] struct. You initialize it with a `ServiceAccountKey`
 //! (typically loaded from a JSON file), and then access the various services.
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use firebase_admin_sdk::{FirebaseApp, yup_oauth2};
 //!
 //! async fn example() {

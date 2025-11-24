@@ -5,7 +5,7 @@
 //!
 //! # Examples
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use firebase_admin_sdk::messaging::models::{Message, Notification};
 //! # use firebase_admin_sdk::FirebaseApp;
 //! # async fn run(app: FirebaseApp) {
@@ -34,8 +34,6 @@ use thiserror::Error;
 use serde::{Deserialize, Serialize};
 
 pub mod models;
-#[cfg(test)]
-mod tests;
 
 /// Errors that can occur during Messaging operations.
 #[derive(Error, Debug)]

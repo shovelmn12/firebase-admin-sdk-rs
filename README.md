@@ -8,6 +8,8 @@ A Rust implementation of the Firebase Admin SDK. This library allows you to inte
 -   **Cloud Messaging (FCM)**: Send messages (single, batch, multicast), manage topics, and support for all target types (token, topic, condition).
 -   **Remote Config**: Get the active template, publish new templates (with ETag optimistic concurrency), rollback to previous versions, and list versions.
 -   **Firestore**: Read and write documents using a `CollectionReference` and `DocumentReference` API similar to the official Node.js SDK.
+ -   **Storage**: Upload, download, and manage files in Google Cloud Storage buckets.
+ -   **Crashlytics**: Programmatically remove crash reports for specific users (e.g., for privacy compliance).
 
 ## Installation
 
@@ -60,6 +62,95 @@ async fn create_user(app: &firebase_admin_sdk::FirebaseApp) {
 
     match auth.create_user(request).await {
         Ok(user) => println!("Created user: {:?}", user.uid),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+}
+```
+
+### Cloud Messaging Example
+
+```rust
+use firebase_admin_sdk::messaging::models::{Message, Notification};
+
+async fn send_message(app: &firebase_admin_sdk::FirebaseApp) {
+    let messaging = app.messaging();
+
+    let message = Message {
+        token: Some("device_token".to_string()),
+        notification: Some(Notification {
+            title: Some("Hello".to_string()),
+            body: Some("World".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    match messaging.send(&message).await {
+        Ok(id) => println!("Sent message: {}", id),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+}
+```
+
+### Remote Config Example
+
+```rust
+async fn get_config(app: &firebase_admin_sdk::FirebaseApp) {
+    let rc = app.remote_config();
+
+    match rc.get().await {
+        Ok(config) => println!("Current config: {:?}", config),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+}
+```
+
+### Firestore Example
+
+```rust
+use serde_json::json;
+
+async fn add_document(app: &firebase_admin_sdk::FirebaseApp) {
+    let firestore = app.firestore();
+    let doc_ref = firestore.collection("users").doc("user1");
+
+    let data = json!({
+        "name": "John Doe",
+        "age": 30
+    });
+
+    match doc_ref.set(&data).await {
+        Ok(_) => println!("Document saved"),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+}
+```
+
+### Storage Example
+
+```rust
+async fn upload_file(app: &firebase_admin_sdk::FirebaseApp) {
+    let storage = app.storage();
+    let bucket = storage.bucket(None); // Uses default bucket
+
+    let file_content = b"Hello, World!";
+    let file = bucket.file("hello.txt");
+
+    match file.save(file_content, "text/plain").await {
+        Ok(_) => println!("File uploaded"),
+        Err(e) => eprintln!("Error: {}", e),
+    }
+}
+```
+
+### Crashlytics Example
+
+```rust
+async fn delete_reports(app: &firebase_admin_sdk::FirebaseApp) {
+    let crashlytics = app.crashlytics();
+
+    match crashlytics.delete_crash_reports("1:1234567890:android:321abc456def7890", "user_uid").await {
+        Ok(_) => println!("Crash reports deleted"),
         Err(e) => eprintln!("Error: {}", e),
     }
 }

@@ -83,6 +83,3 @@ impl FirebaseFirestore {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

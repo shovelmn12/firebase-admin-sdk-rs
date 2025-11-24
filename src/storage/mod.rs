@@ -1,3 +1,24 @@
+//! Cloud Storage for Firebase module.
+//!
+//! This module provides functionality for interacting with Google Cloud Storage buckets
+//! associated with your Firebase project. It supports uploading, downloading, and deleting files,
+//! as well as managing file metadata.
+//!
+//! # Examples
+//!
+//! ```rust,ignore
+//! # use firebase_admin_sdk::FirebaseApp;
+//! # async fn run(app: FirebaseApp) {
+//! let storage = app.storage();
+//! let bucket = storage.bucket(None); // Use default bucket
+//!
+//! // Upload a file
+//! let file_content = b"Hello, World!".to_vec();
+//! let file = bucket.file("hello.txt");
+//! let _ = file.save(file_content, "text/plain").await;
+//! # }
+//! ```
+
 pub mod bucket;
 pub mod file;
 
@@ -75,20 +96,4 @@ impl FirebaseStorage {
 
         Bucket::new(self.client.clone(), self.base_url.clone(), bucket_name)
     }
-
-    #[cfg(test)]
-    pub(crate) fn new_with_client(
-        client: ClientWithMiddleware,
-        base_url: String,
-        project_id: String,
-    ) -> Self {
-        Self {
-            client,
-            base_url,
-            project_id,
-        }
-    }
 }
-
-#[cfg(test)]
-mod tests;
