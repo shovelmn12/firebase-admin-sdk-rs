@@ -1,5 +1,7 @@
+use super::listen::{listen_request, ListenStream};
 use super::models::{
-    ArrayValue, Document, ListDocumentsResponse, MapValue, Value, ValueType,
+    ArrayValue, Document, DocumentsTarget, ListenRequest, ListDocumentsResponse, MapValue, Target,
+    TargetType, Value, ValueType,
 };
 use super::FirestoreError;
 use reqwest::header;
@@ -112,6 +114,18 @@ fn convert_serde_value_to_firestore_value(value: SerdeValue) -> Result<Value, Fi
     Ok(Value { value_type })
 }
 
+// Helper to extract project and database from a path
+// Path format: projects/{project_id}/databases/(default)/documents/...
+fn extract_database_path(path: &str) -> String {
+    let parts: Vec<&str> = path.split("/documents").collect();
+    if parts.len() > 0 {
+        parts[0].to_string()
+    } else {
+        // Fallback, though strict parsing would be better
+        path.to_string()
+    }
+}
+
 #[derive(Clone)]
 pub struct DocumentReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
@@ -222,6 +236,33 @@ impl<'a> DocumentReference<'a> {
 
         Ok(())
     }
+
+    /// Listens to changes to the document.
+    ///
+    /// Returns a stream of `ListenResponse` events.
+    pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
+        let database = extract_database_path(&self.path);
+
+        let target = Target {
+            target_type: Some(TargetType::Documents(DocumentsTarget {
+                documents: vec![self.path.clone()],
+            })),
+            target_id: Some(1), // Arbitrary ID
+            resume_token: None,
+            read_time: None,
+            once: None,
+            expected_count: None,
+        };
+
+        let request = ListenRequest {
+            database: database.clone(),
+            add_target: Some(target),
+            remove_target: None,
+            labels: None,
+        };
+
+        listen_request(self.client, &database, &request).await
+    }
 }
 
 #[derive(Clone)]
@@ -278,4 +319,7 @@ impl<'a> CollectionReference<'a> {
         let doc: Document = response.json().await?;
         Ok(doc)
     }
+
+    // TODO: Implement listen for collections (requires QueryTarget construction which is more complex)
+    // For now, let's focus on document listen as proof of concept, or implement basic collection query (all docs).
 }

@@ -5,6 +5,7 @@
 //!
 //! It mirrors the Firebase Admin Node.js SDK's structure using `CollectionReference` and `DocumentReference`.
 
+pub mod listen;
 pub mod models;
 pub mod reference;
 
