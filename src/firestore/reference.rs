@@ -1,7 +1,7 @@
 use super::listen::{listen_request, ListenStream};
 use super::models::{
-    ArrayValue, Document, DocumentsTarget, ListenRequest, ListDocumentsResponse, MapValue, Target,
-    TargetType, Value, ValueType,
+    ArrayValue, CollectionSelector, Document, DocumentsTarget, ListenRequest, ListDocumentsResponse,
+    MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value, ValueType,
 };
 use super::FirestoreError;
 use reqwest::header;
@@ -121,9 +121,25 @@ fn extract_database_path(path: &str) -> String {
     if parts.len() > 0 {
         parts[0].to_string()
     } else {
-        // Fallback, though strict parsing would be better
+        // Fallback
         path.to_string()
     }
+}
+
+// Helper to extract parent path and collection ID
+// Input: .../documents/users
+// Output: (parent_path, "users") where parent_path is relative (projects/...)
+fn extract_parent_and_collection(path: &str) -> Option<(String, String)> {
+    // Find where "projects/" starts
+    let start = path.find("projects/")?;
+    let resource_path = &path[start..];
+
+    // Last part is collection ID
+    let slash_idx = resource_path.rfind('/')?;
+    let collection_id = &resource_path[slash_idx + 1..];
+    let parent = &resource_path[..slash_idx];
+
+    Some((parent.to_string(), collection_id.to_string()))
 }
 
 #[derive(Clone)]
@@ -239,7 +255,13 @@ impl<'a> DocumentReference<'a> {
 
     /// Listens to changes to the document.
     ///
-    /// Returns a stream of `ListenResponse` events.
+    /// This method establishes a streaming connection to Firestore and returns a stream of
+    /// `ListenResponse` events. These events include document changes (`DocumentChange`),
+    /// target changes (`TargetChange`), and other state updates.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `ListenStream` which yields `Result<ListenResponse, FirestoreError>`.
     pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
         let database = extract_database_path(&self.path);
 
@@ -320,6 +342,53 @@ impl<'a> CollectionReference<'a> {
         Ok(doc)
     }
 
-    // TODO: Implement listen for collections (requires QueryTarget construction which is more complex)
-    // For now, let's focus on document listen as proof of concept, or implement basic collection query (all docs).
+    /// Listens to changes in the collection.
+    ///
+    /// This method establishes a streaming connection to Firestore and returns a stream of
+    /// `ListenResponse` events. It effectively performs a query for all documents in this collection.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `ListenStream` which yields `Result<ListenResponse, FirestoreError>`.
+    pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
+        let database = extract_database_path(&self.path);
+        let (parent, collection_id) = extract_parent_and_collection(&self.path).ok_or_else(|| {
+            FirestoreError::ApiError("Failed to extract parent and collection ID".into())
+        })?;
+
+        let query_target = QueryTarget {
+            parent,
+            structured_query: Some(StructuredQuery {
+                from: Some(vec![CollectionSelector {
+                    collection_id,
+                    all_descendants: None,
+                }]),
+                select: None,
+                where_clause: None,
+                order_by: None,
+                start_at: None,
+                end_at: None,
+                offset: None,
+                limit: None,
+            }),
+        };
+
+        let target = Target {
+            target_type: Some(TargetType::Query(query_target)),
+            target_id: Some(1), // Arbitrary ID
+            resume_token: None,
+            read_time: None,
+            once: None,
+            expected_count: None,
+        };
+
+        let request = ListenRequest {
+            database: database.clone(),
+            add_target: Some(target),
+            remove_target: None,
+            labels: None,
+        };
+
+        listen_request(self.client, &database, &request).await
+    }
 }

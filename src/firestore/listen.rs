@@ -144,7 +144,9 @@ pub async fn listen_request(
     base_url: &str,
     request: &ListenRequest,
 ) -> Result<ListenStream, FirestoreError> {
-    let url = format!("{}:listen", base_url);
+    // The base_url passed here is usually "projects/{p}/databases/{d}".
+    // The listen endpoint is at ".../documents:listen".
+    let url = format!("{}/documents:listen", base_url);
 
     // We use a POST request with the ListenRequest in the body
     let response = client
@@ -172,4 +174,44 @@ pub async fn listen_request(
     });
 
     Ok(ListenStream::new(Box::pin(stream)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_json_boundary() {
+        // Simple object
+        let buf = br#"{"a":1}"#;
+        assert_eq!(find_json_boundary(buf), Some(7));
+
+        // Whitespace
+        let buf = br#"  {"a":1}  "#;
+        assert_eq!(find_json_boundary(buf), Some(9));
+
+        // Nested object
+        let buf = br#"{"a":{"b":2}}"#;
+        assert_eq!(find_json_boundary(buf), Some(13));
+
+        // Incomplete
+        let buf = br#"{"a":1"#;
+        assert_eq!(find_json_boundary(buf), None);
+
+        // String with braces
+        let buf = br#"{"a":"}"}"#;
+        assert_eq!(find_json_boundary(buf), Some(9));
+
+        // Escaped quote
+        let buf = br#"{"a":"\"}"}"#;
+        assert_eq!(find_json_boundary(buf), Some(11));
+
+        // Array
+        let buf = br#"{"a":[1,2]}"#;
+        assert_eq!(find_json_boundary(buf), Some(11));
+
+        // Multiple objects (should find first)
+        let buf = br#"{"a":1}{"b":2}"#;
+        assert_eq!(find_json_boundary(buf), Some(7));
+    }
 }
