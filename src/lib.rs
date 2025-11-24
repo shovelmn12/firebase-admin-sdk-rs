@@ -32,6 +32,7 @@ pub mod core;
 pub mod firestore;
 pub mod messaging;
 pub mod remote_config;
+pub mod storage;
 
 // Re-export yup_oauth2 for user convenience so they don't need to add it separately
 pub use yup_oauth2;
@@ -41,6 +42,7 @@ use core::middleware::AuthMiddleware;
 use firestore::FirebaseFirestore;
 use messaging::FirebaseMessaging;
 use remote_config::FirebaseRemoteConfig;
+use storage::FirebaseStorage;
 use yup_oauth2::ServiceAccountKey;
 
 /// The entry point for the Firebase Admin SDK.
@@ -88,5 +90,10 @@ impl FirebaseApp {
     /// Returns a client for interacting with Cloud Firestore.
     pub fn firestore(&self) -> FirebaseFirestore {
         FirebaseFirestore::new(self.middleware.clone())
+    }
+
+    /// Returns a client for interacting with Firebase Storage.
+    pub fn storage(&self) -> FirebaseStorage {
+        FirebaseStorage::new(self.middleware.clone())
     }
 }
