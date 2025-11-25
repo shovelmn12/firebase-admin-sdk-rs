@@ -1,9 +1,14 @@
 //! Cloud Firestore module.
 //!
 //! This module provides functionality for interacting with Cloud Firestore,
-//! including getting references to collections and documents.
+//! including getting references to collections and documents, and listening for real-time updates.
 //!
 //! It mirrors the Firebase Admin Node.js SDK's structure using `CollectionReference` and `DocumentReference`.
+//!
+//! # Real-time Updates
+//!
+//! You can listen for changes to a document or an entire collection using the `listen()` method
+//! on `DocumentReference` and `CollectionReference`. This returns a stream of `ListenResponse` events.
 
 pub mod listen;
 pub mod models;
