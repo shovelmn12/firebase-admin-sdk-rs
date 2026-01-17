@@ -6,7 +6,7 @@ use yup_oauth2::authenticator::Authenticator;
 use hyper_rustls::HttpsConnector;
 use hyper::client::HttpConnector;
 use http::Extensions;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// The concrete type of the Authenticator used by `yup-oauth2`.
 ///
@@ -29,6 +29,8 @@ pub struct AuthMiddleware {
     pub key: ServiceAccountKey,
     /// A lazy-initialized authenticator instance.
     authenticator: Arc<OnceCell<AuthType>>,
+    /// Optional Tenant ID for multi-tenancy.
+    tenant_id: Arc<RwLock<Option<String>>>,
 }
 
 impl AuthMiddleware {
@@ -41,7 +43,20 @@ impl AuthMiddleware {
         Self {
             key,
             authenticator: Arc::new(OnceCell::new()),
+            tenant_id: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Sets the Tenant ID for this middleware instance.
+    pub fn set_tenant_id(&mut self, tenant_id: &str) {
+        if let Ok(mut lock) = self.tenant_id.write() {
+            *lock = Some(tenant_id.to_string());
+        }
+    }
+
+    /// Gets the current Tenant ID.
+    pub fn tenant_id(&self) -> Option<String> {
+        self.tenant_id.read().ok()?.clone()
     }
 
     /// Retrieves a valid OAuth2 token, initializing the authenticator if necessary.
