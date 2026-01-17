@@ -1,6 +1,6 @@
 use super::models::{ListenRequest, ListenResponse};
 use super::FirestoreError;
-use futures::stream::{self, Stream, StreamExt};
+use futures::stream::{self, Stream};
 use reqwest_middleware::ClientWithMiddleware;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -138,7 +138,10 @@ fn find_json_boundary(buf: &[u8]) -> Option<usize> {
     None
 }
 
-
+/// Initiates a listen request to Firestore.
+///
+/// This internal function sends the `ListenRequest` to the API and sets up the
+/// stream processing to handle the response body as a stream of JSON objects.
 pub async fn listen_request(
     client: &ClientWithMiddleware,
     base_url: &str,
