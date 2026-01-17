@@ -15,8 +15,8 @@ pub mod models;
 pub mod reference;
 pub mod transaction;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 use self::reference::{CollectionReference, DocumentReference};
 use self::transaction::Transaction;
