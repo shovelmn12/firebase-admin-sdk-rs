@@ -12,7 +12,9 @@
 
 pub mod listen;
 pub mod models;
+pub mod query;
 pub mod reference;
+pub mod snapshot;
 pub mod transaction;
 
 // #[cfg(test)]

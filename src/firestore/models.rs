@@ -533,6 +533,40 @@ pub struct StructuredQuery {
     pub limit: Option<i32>,
 }
 
+/// The request for `runQuery`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RunQueryRequest {
+    /// The parent resource name.
+    pub parent: String,
+    /// The structured query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_query: Option<StructuredQuery>,
+    // TODO: Add support for transactions
+    // pub transaction: Option<String>,
+    // pub new_transaction: Option<TransactionOptions>,
+    // pub read_time: Option<String>,
+}
+
+/// The response for `runQuery`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RunQueryResponse {
+    /// The transaction that was started or is being used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<String>,
+    /// A query result, not set when reporting partial progress.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document: Option<Document>,
+    /// The time at which the document was read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_time: Option<String>,
+    /// The number of results that have been skipped due to an offset between
+    /// the last response and the current response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped_results: Option<i32>,
+}
+
 /// The projection of document's fields to return.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -587,7 +621,7 @@ pub struct CompositeFilter {
 }
 
 /// A composite operator.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CompositeOperator {
     /// Unspecified operator.
