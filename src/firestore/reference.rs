@@ -14,7 +14,7 @@ use serde_json::Value as SerdeValue;
 use std::collections::HashMap;
 
 // Helper to convert Firestore's value map to a standard serde_json::Value
-fn convert_fields_to_serde_value(
+pub(crate) fn convert_fields_to_serde_value(
     fields: HashMap<String, Value>,
 ) -> Result<SerdeValue, FirestoreError> {
     let mut map = Map::new();
@@ -24,7 +24,7 @@ fn convert_fields_to_serde_value(
     Ok(SerdeValue::Object(map))
 }
 
-fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreError> {
+pub(crate) fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreError> {
     use serde_json::json;
     Ok(match value.value_type {
         ValueType::StringValue(s) => SerdeValue::String(s),
@@ -63,7 +63,7 @@ fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreErr
 }
 
 // Helper to convert a serializable Rust struct to Firestore's value map
-fn convert_serializable_to_fields<T: Serialize>(
+pub(crate) fn convert_serializable_to_fields<T: Serialize>(
     value: &T,
 ) -> Result<HashMap<String, Value>, FirestoreError> {
     let serde_value = serde_json::to_value(value)?;
@@ -80,7 +80,9 @@ fn convert_serializable_to_fields<T: Serialize>(
     }
 }
 
-fn convert_serde_value_to_firestore_value(value: SerdeValue) -> Result<Value, FirestoreError> {
+pub(crate) fn convert_serde_value_to_firestore_value(
+    value: SerdeValue,
+) -> Result<Value, FirestoreError> {
     let value_type = match value {
         SerdeValue::Null => ValueType::NullValue(()),
         SerdeValue::Bool(b) => ValueType::BooleanValue(b),

@@ -56,6 +56,142 @@ pub struct ListDocumentsResponse {
     pub next_page_token: Option<String>,
 }
 
+// --- Transaction Models ---
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BeginTransactionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<TransactionOptions>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionOptions {
+    #[serde(flatten)]
+    pub mode: Option<TransactionMode>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum TransactionMode {
+    ReadOnly(ReadOnlyOptions),
+    ReadWrite(ReadWriteOptions),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadOnlyOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadWriteOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_transaction: Option<String>, // Previous transaction ID
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BeginTransactionResponse {
+    pub transaction: String, // The transaction ID (bytes as string)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackRequest {
+    pub transaction: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRequest {
+    pub transaction: String,
+    pub writes: Vec<Write>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitResponse {
+    #[serde(default)]
+    pub write_results: Vec<WriteResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_time: Option<String>,
+    #[serde(default)]
+    pub transform_results: Vec<Value>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Write {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_mask: Option<DocumentMask>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_transforms: Option<Vec<FieldTransform>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_document: Option<Precondition>,
+    #[serde(flatten)]
+    pub operation: WriteOperation,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum WriteOperation {
+    Update(Document),
+    Delete(String), // Document name
+    Transform(DocumentTransform),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentMask {
+    pub field_paths: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Precondition {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exists: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentTransform {
+    pub document: String,
+    pub field_transforms: Vec<FieldTransform>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldTransform {
+    pub field_path: String,
+    #[serde(flatten)]
+    pub transform_type: TransformType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum TransformType {
+    SetToServerValue(String), // e.g. "REQUEST_TIME"
+    Increment(Value),
+    Maximum(Value),
+    Minimum(Value),
+    AppendMissingElements(ArrayValue),
+    RemoveAllFromArray(ArrayValue),
+}
+
 // --- Listen API Models ---
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
