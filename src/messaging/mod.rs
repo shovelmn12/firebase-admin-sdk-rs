@@ -21,7 +21,7 @@
 //!     ..Default::default()
 //! };
 //!
-//! let result = messaging.send(&message).await;
+//! let result = messaging.send(&message, false).await;
 //! # }
 //! ```
 
@@ -29,7 +29,7 @@ use reqwest::{Client, header};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use crate::core::middleware::AuthMiddleware;
-use crate::messaging::models::{Message, TopicManagementResponse, TopicManagementError, BatchResponse, SendResponse, SendResponseInternal};
+use crate::messaging::models::{Message, MulticastMessage, TopicManagementResponse, TopicManagementError, BatchResponse, SendResponse, SendResponseInternal};
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
 
@@ -110,15 +110,10 @@ impl FirebaseMessaging {
     /// # Arguments
     ///
     /// * `message` - The `Message` struct defining the payload and target.
-    pub async fn send(&self, message: &Message) -> Result<String, MessagingError> {
+    /// * `dry_run` - If true, the message will be validated but not sent.
+    pub async fn send(&self, message: &Message, dry_run: bool) -> Result<String, MessagingError> {
         self.validate_message(message)?;
-        self.send_request(message, false).await
-    }
-
-    /// Validates a message without actually sending it.
-    pub async fn send_dry_run(&self, message: &Message) -> Result<String, MessagingError> {
-        self.validate_message(message)?;
-        self.send_request(message, true).await
+        self.send_request(message, dry_run).await
     }
 
     /// Validates that the message has exactly one target.
@@ -174,19 +169,12 @@ impl FirebaseMessaging {
     /// # Arguments
     ///
     /// * `messages` - A slice of `Message` structs.
-    pub async fn send_each(&self, messages: &[Message]) -> Result<BatchResponse, MessagingError> {
+    /// * `dry_run` - If true, the messages will be validated but not sent.
+    pub async fn send_each(&self, messages: &[Message], dry_run: bool) -> Result<BatchResponse, MessagingError> {
         for message in messages {
             self.validate_message(message)?;
         }
-        self.send_each_request(messages, false).await
-    }
-
-    /// Sends a batch of messages in dry-run mode (validation only).
-    pub async fn send_each_dry_run(&self, messages: &[Message]) -> Result<BatchResponse, MessagingError> {
-        for message in messages {
-            self.validate_message(message)?;
-        }
-        self.send_each_request(messages, true).await
+        self.send_each_request(messages, dry_run).await
     }
 
     async fn send_each_request(&self, messages: &[Message], dry_run: bool) -> Result<BatchResponse, MessagingError> {
@@ -323,46 +311,38 @@ impl FirebaseMessaging {
         Ok(responses)
     }
 
-    /// Sends a message to multiple recipients.
+    /// Sends a multicast message to all specified tokens.
     ///
     /// This is a wrapper around `send_each` that constructs individual messages for each token.
     ///
     /// # Arguments
     ///
-    /// * `message` - The base message to send (must not have `token`, `topic`, or `condition` set).
-    /// * `tokens` - A list of device tokens to send to.
-    pub async fn send_multicast(&self, message: &Message, tokens: &[&str]) -> Result<BatchResponse, MessagingError> {
-        self.send_multicast_request(message, tokens, false).await
-    }
-
-    /// Sends a multicast message in dry-run mode.
-    pub async fn send_multicast_dry_run(&self, message: &Message, tokens: &[&str]) -> Result<BatchResponse, MessagingError> {
-        self.send_multicast_request(message, tokens, true).await
-    }
-
-    async fn send_multicast_request(&self, base_message: &Message, tokens: &[&str], dry_run: bool) -> Result<BatchResponse, MessagingError> {
-        if base_message.token.is_some() || base_message.topic.is_some() || base_message.condition.is_some() {
-            return Err(MessagingError::ApiError(
-                "Multicast base message must not have a target (token, topic, or condition).".to_string(),
-            ));
-        }
-
-        let messages: Vec<Message> = tokens.iter().map(|token| {
-            let mut msg = base_message.clone();
-            msg.token = Some(token.to_string());
-            msg
+    /// * `message` - The `MulticastMessage` containing tokens and payload.
+    /// * `dry_run` - If true, the messages will be validated but not sent.
+    pub async fn send_each_for_multicast(&self, message: &MulticastMessage, dry_run: bool) -> Result<BatchResponse, MessagingError> {
+        let messages: Vec<Message> = message.tokens.iter().map(|token| {
+            Message {
+                token: Some(token.clone()),
+                data: message.data.clone(),
+                notification: message.notification.clone(),
+                android: message.android.clone(),
+                webpush: message.webpush.clone(),
+                apns: message.apns.clone(),
+                fcm_options: message.fcm_options.clone(),
+                ..Default::default()
+            }
         }).collect();
 
-        self.send_each_request(&messages, dry_run).await
+        self.send_each(&messages, dry_run).await
     }
 
     /// Subscribes a list of tokens to a topic.
     ///
     /// # Arguments
     ///
-    /// * `topic` - The name of the topic.
     /// * `tokens` - A list of device registration tokens.
-    pub async fn subscribe_to_topic(&self, topic: &str, tokens: &[&str]) -> Result<TopicManagementResponse, MessagingError> {
+    /// * `topic` - The name of the topic.
+    pub async fn subscribe_to_topic(&self, tokens: &[&str], topic: &str) -> Result<TopicManagementResponse, MessagingError> {
         self.manage_topic(topic, tokens, true).await
     }
 
@@ -370,9 +350,9 @@ impl FirebaseMessaging {
     ///
     /// # Arguments
     ///
-    /// * `topic` - The name of the topic.
     /// * `tokens` - A list of device registration tokens.
-    pub async fn unsubscribe_from_topic(&self, topic: &str, tokens: &[&str]) -> Result<TopicManagementResponse, MessagingError> {
+    /// * `topic` - The name of the topic.
+    pub async fn unsubscribe_from_topic(&self, tokens: &[&str], topic: &str) -> Result<TopicManagementResponse, MessagingError> {
         self.manage_topic(topic, tokens, false).await
     }
 

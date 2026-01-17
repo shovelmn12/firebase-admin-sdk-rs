@@ -47,6 +47,38 @@ pub struct Message {
     pub condition: Option<String>,
 }
 
+/// Represents a message to be sent to multiple recipients via FCM.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MulticastMessage {
+    /// A list of registration tokens to send the message to.
+    pub tokens: Vec<String>,
+
+    /// Arbitrary key/value payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<HashMap<String, String>>,
+
+    /// Basic notification template to use across all platforms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notification: Option<Notification>,
+
+    /// Android specific options for messages sent through FCM connection server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub android: Option<AndroidConfig>,
+
+    /// Webpush protocol options.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webpush: Option<WebpushConfig>,
+
+    /// Apple Push Notification Service specific options.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub apns: Option<ApnsConfig>,
+
+    /// Template for FCM options across all platforms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fcm_options: Option<FcmOptions>,
+}
+
 /// Basic notification template to use across all platforms.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
