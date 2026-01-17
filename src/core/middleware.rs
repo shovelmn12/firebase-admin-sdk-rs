@@ -4,14 +4,11 @@ use tokio::sync::OnceCell;
 use yup_oauth2::{ServiceAccountAuthenticator, ServiceAccountKey};
 use yup_oauth2::authenticator::Authenticator;
 use hyper_rustls::HttpsConnector;
-use hyper::client::HttpConnector;
+use hyper_util::client::legacy::connect::HttpConnector;
 use http::Extensions;
 use std::sync::Arc;
 
 /// The concrete type of the Authenticator used by `yup-oauth2`.
-///
-/// In `yup-oauth2` v8 (which relies on `hyper` 0.14), the `Authenticator` is generic over the connector.
-/// We use `hyper_rustls` to provide the HTTPS connector.
 type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 
 /// A middleware that handles OAuth2 authentication for Firebase requests.

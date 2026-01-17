@@ -154,7 +154,8 @@ pub struct RollbackRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CommitRequest {
     /// The transaction ID to commit.
-    pub transaction: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<String>,
     /// The writes to apply.
     pub writes: Vec<Write>,
 }
