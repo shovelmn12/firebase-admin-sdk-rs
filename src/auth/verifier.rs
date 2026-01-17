@@ -42,7 +42,17 @@ impl IdTokenVerifier {
         }
     }
 
-    pub async fn verify_token(&self, token: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
+    /// Verifies a Firebase ID token.
+    pub async fn verify_id_token(&self, token: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
+        self.verify_token_with_issuer(token, &format!("https://securetoken.google.com/{}", self.project_id)).await
+    }
+
+    /// Verifies a Firebase Session Cookie.
+    pub async fn verify_session_cookie(&self, token: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
+        self.verify_token_with_issuer(token, &format!("https://session.firebase.google.com/{}", self.project_id)).await
+    }
+
+    async fn verify_token_with_issuer(&self, token: &str, issuer: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
         // 1. Decode header to get kid
         let header = decode_header(token)?;
         let kid = header.kid.ok_or_else(|| TokenVerificationError::InvalidToken("Missing kid in header".to_string()))?;
@@ -54,7 +64,7 @@ impl IdTokenVerifier {
         // 3. Configure validation
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_audience(&[&self.project_id]);
-        validation.set_issuer(&[format!("https://securetoken.google.com/{}", self.project_id)]);
+        validation.set_issuer(&[issuer]);
 
         // 4. Verify
         let token_data = decode::<FirebaseTokenClaims>(token, &key, &validation)?;

@@ -7,13 +7,19 @@
 pub mod keys;
 pub mod models;
 pub mod verifier;
+pub mod tenant_mgt;
+pub mod project_config;
+pub mod project_config_impl;
 
 use crate::auth::models::{
-    CreateUserRequest, DeleteAccountRequest, EmailLinkRequest, EmailLinkResponse,
-    GetAccountInfoRequest, GetAccountInfoResponse, ImportUsersRequest, ImportUsersResponse,
-    ListUsersResponse, UpdateUserRequest, UserRecord,
+    CreateSessionCookieRequest, CreateSessionCookieResponse, CreateUserRequest,
+    DeleteAccountRequest, EmailLinkRequest, EmailLinkResponse, GetAccountInfoRequest,
+    GetAccountInfoResponse, ImportUsersRequest, ImportUsersResponse, ListUsersResponse,
+    UpdateUserRequest, UserRecord,
 };
 use crate::auth::verifier::{FirebaseTokenClaims, IdTokenVerifier, TokenVerificationError};
+use crate::auth::tenant_mgt::TenantAwareness;
+use crate::auth::project_config_impl::ProjectConfig;
 use crate::core::middleware::AuthMiddleware;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::header;
@@ -26,6 +32,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 const AUTH_V1_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}";
+const AUTH_V1_TENANT_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}/tenants/{tenant_id}";
 
 /// Errors that can occur during Authentication operations.
 #[derive(Error, Debug)]
@@ -82,6 +89,7 @@ pub struct FirebaseAuth {
     base_url: String,
     verifier: Arc<IdTokenVerifier>,
     middleware: AuthMiddleware,
+    tenant_id: Option<String>,
 }
 
 impl FirebaseAuth {
@@ -99,14 +107,32 @@ impl FirebaseAuth {
         let key = &middleware.key;
         let project_id = key.project_id.clone().unwrap_or_default();
         let verifier = Arc::new(IdTokenVerifier::new(project_id.clone()));
-        let base_url = AUTH_V1_API.replace("{project_id}", &project_id);
+
+        let tenant_id = middleware.tenant_id();
+
+        let base_url = if let Some(tid) = &tenant_id {
+             AUTH_V1_TENANT_API.replace("{project_id}", &project_id).replace("{tenant_id}", tid)
+        } else {
+             AUTH_V1_API.replace("{project_id}", &project_id)
+        };
 
         Self {
             client,
             base_url,
             verifier,
             middleware,
+            tenant_id,
         }
+    }
+
+    /// Returns the tenant awareness interface.
+    pub fn tenant_manager(&self) -> TenantAwareness {
+        TenantAwareness::new(self.middleware.clone())
+    }
+
+    /// Returns the project config interface.
+    pub fn project_config_manager(&self) -> ProjectConfig {
+        ProjectConfig::new(self.middleware.clone())
     }
 
     /// Verifies a Firebase ID token.
@@ -118,7 +144,58 @@ impl FirebaseAuth {
     ///
     /// * `token` - The JWT ID token string.
     pub async fn verify_id_token(&self, token: &str) -> Result<FirebaseTokenClaims, AuthError> {
-        Ok(self.verifier.verify_token(token).await?)
+        Ok(self.verifier.verify_id_token(token).await?)
+    }
+
+    /// Creates a session cookie from an ID token.
+    ///
+    /// # Arguments
+    ///
+    /// * `id_token` - The ID token to exchange for a session cookie.
+    /// * `valid_duration` - The duration for which the session cookie is valid.
+    pub async fn create_session_cookie(
+        &self,
+        id_token: &str,
+        valid_duration: std::time::Duration,
+    ) -> Result<String, AuthError> {
+        let url = format!("{}:createSessionCookie", self.base_url);
+
+        let request = CreateSessionCookieRequest {
+            id_token: id_token.to_string(),
+            valid_duration_seconds: valid_duration.as_secs(),
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(&request)?)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(AuthError::ApiError(format!(
+                "Create session cookie failed {}: {}",
+                status, text
+            )));
+        }
+
+        let result: CreateSessionCookieResponse = response.json().await?;
+        Ok(result.session_cookie)
+    }
+
+    /// Verifies a Firebase session cookie.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_cookie` - The session cookie string.
+    pub async fn verify_session_cookie(
+        &self,
+        session_cookie: &str,
+    ) -> Result<FirebaseTokenClaims, AuthError> {
+        Ok(self.verifier.verify_session_cookie(session_cookie).await?)
     }
 
     /// Creates a custom token for the given UID with optional custom claims.
@@ -143,6 +220,11 @@ impl FirebaseAuth {
             .unwrap()
             .as_secs() as usize;
 
+        let mut final_claims = custom_claims.unwrap_or_default();
+        if let Some(tid) = &self.tenant_id {
+            final_claims.insert("tenant_id".to_string(), serde_json::Value::String(tid.clone()));
+        }
+
         let claims = CustomTokenClaims {
             iss: client_email.clone(),
             sub: client_email,
@@ -150,7 +232,7 @@ impl FirebaseAuth {
             iat: now,
             exp: now + 3600, // 1 hour expiration
             uid: uid.to_string(),
-            claims: custom_claims,
+            claims: Some(final_claims),
         };
 
         let encoding_key = EncodingKey::from_rsa_pem(private_key.as_bytes())
