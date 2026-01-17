@@ -2,6 +2,7 @@ use crate::storage::StorageError;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 /// Represents a file within a Google Cloud Storage bucket.
 pub struct File {
@@ -138,10 +139,14 @@ impl File {
             }
         };
 
+        let mut url_obj = Url::parse(&url).map_err(|e| StorageError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut()
+            .append_pair("uploadType", "media")
+            .append_pair("name", &self.name);
+
         let response = self
             .client
-            .post(&url)
-            .query(&[("uploadType", "media"), ("name", &self.name)])
+            .post(url_obj)
             .header(header::CONTENT_TYPE, mime_type)
             .body(body)
             .send()
@@ -169,10 +174,12 @@ impl File {
             self.base_url, self.bucket_name, encoded_name
         );
 
+        let mut url_obj = Url::parse(&url).map_err(|e| StorageError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("alt", "media");
+
         let response = self
             .client
-            .get(&url)
-            .query(&[("alt", "media")])
+            .get(url_obj)
             .send()
             .await?;
 

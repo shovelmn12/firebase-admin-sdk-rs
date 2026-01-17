@@ -6,6 +6,7 @@ use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 const IDENTITY_TOOLKIT_URL: &str = "https://identitytoolkit.googleapis.com/v2";
 
@@ -279,10 +280,12 @@ impl TenantAwareness {
 
         let update_mask = mask_parts.join(",");
 
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("updateMask", &update_mask);
+
         let response = self
             .client
-            .patch(&url)
-            .query(&[("updateMask", update_mask)])
+            .patch(url_obj)
             .json(&request)
             .send()
             .await?;
@@ -325,16 +328,19 @@ impl TenantAwareness {
         page_token: Option<&str>,
     ) -> Result<ListTenantsResponse, AuthError> {
         let url = format!("{}/tenants", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
 
-        let mut params = Vec::new();
-        if let Some(max) = max_results {
-            params.push(("pageSize", max.to_string()));
-        }
-        if let Some(token) = page_token {
-            params.push(("pageToken", token.to_string()));
+        {
+            let mut query_pairs = url_obj.query_pairs_mut();
+            if let Some(max) = max_results {
+                query_pairs.append_pair("pageSize", &max.to_string());
+            }
+            if let Some(token) = page_token {
+                query_pairs.append_pair("pageToken", token);
+            }
         }
 
-        let response = self.client.get(&url).query(&params).send().await?;
+        let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();

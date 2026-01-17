@@ -9,6 +9,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
+use url::Url;
 
 /// Represents a Firestore Transaction.
 ///
@@ -51,12 +52,13 @@ impl<'a> Transaction<'a> {
         // But the `base_url` is `https://firestore.../documents`.
         // So we append the relative path.
         let url = format!("{}/{}", self.base_url, document_path);
+        let mut url_obj = Url::parse(&url).map_err(|e| FirestoreError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("transaction", &self.transaction_id);
 
         // Add the transaction ID query parameter
         let response = self
             .client
-            .get(&url)
-            .query(&[("transaction", &self.transaction_id)])
+            .get(url_obj)
             .send()
             .await?;
 

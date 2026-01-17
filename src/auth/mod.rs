@@ -30,6 +30,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use url::Url;
 
 const AUTH_V1_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}";
 const AUTH_V1_TENANT_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}/tenants/{tenant_id}";
@@ -522,15 +523,17 @@ impl FirebaseAuth {
         page_token: Option<&str>,
     ) -> Result<ListUsersResponse, AuthError> {
         let url = format!("{}/accounts", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
 
-        // Query params
-        let mut params = Vec::new();
-        params.push(("maxResults", max_results.to_string()));
-        if let Some(token) = page_token {
-            params.push(("nextPageToken", token.to_string()));
+        {
+            let mut query_pairs = url_obj.query_pairs_mut();
+            query_pairs.append_pair("maxResults", &max_results.to_string());
+            if let Some(token) = page_token {
+                query_pairs.append_pair("nextPageToken", token);
+            }
         }
 
-        let response = self.client.get(&url).query(&params).send().await?;
+        let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
