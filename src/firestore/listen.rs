@@ -1,6 +1,6 @@
 use super::models::{ListenRequest, ListenResponse};
 use super::FirestoreError;
-use futures::stream::{self, Stream, StreamExt};
+use futures::stream::{self, Stream};
 use reqwest_middleware::ClientWithMiddleware;
 use std::pin::Pin;
 use std::task::{Context, Poll};

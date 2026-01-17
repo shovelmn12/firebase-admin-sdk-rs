@@ -3,6 +3,7 @@ use super::models::{
     ArrayValue, CollectionSelector, Document, DocumentsTarget, ListenRequest, ListDocumentsResponse,
     MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value, ValueType,
 };
+use super::query::{run_query_request, Query};
 use super::FirestoreError;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
@@ -14,7 +15,7 @@ use serde_json::Value as SerdeValue;
 use std::collections::HashMap;
 
 // Helper to convert Firestore's value map to a standard serde_json::Value
-fn convert_fields_to_serde_value(
+pub(crate) fn convert_fields_to_serde_value(
     fields: HashMap<String, Value>,
 ) -> Result<SerdeValue, FirestoreError> {
     let mut map = Map::new();
@@ -24,7 +25,7 @@ fn convert_fields_to_serde_value(
     Ok(SerdeValue::Object(map))
 }
 
-fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreError> {
+pub(crate) fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreError> {
     use serde_json::json;
     Ok(match value.value_type {
         ValueType::StringValue(s) => SerdeValue::String(s),
@@ -63,7 +64,7 @@ fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreErr
 }
 
 // Helper to convert a serializable Rust struct to Firestore's value map
-fn convert_serializable_to_fields<T: Serialize>(
+pub(crate) fn convert_serializable_to_fields<T: Serialize>(
     value: &T,
 ) -> Result<HashMap<String, Value>, FirestoreError> {
     let serde_value = serde_json::to_value(value)?;
@@ -80,7 +81,9 @@ fn convert_serializable_to_fields<T: Serialize>(
     }
 }
 
-fn convert_serde_value_to_firestore_value(value: SerdeValue) -> Result<Value, FirestoreError> {
+pub(crate) fn convert_serde_value_to_firestore_value(
+    value: SerdeValue,
+) -> Result<Value, FirestoreError> {
     let value_type = match value {
         SerdeValue::Null => ValueType::NullValue(()),
         SerdeValue::Bool(b) => ValueType::BooleanValue(b),
@@ -116,7 +119,7 @@ fn convert_serde_value_to_firestore_value(value: SerdeValue) -> Result<Value, Fi
 
 // Helper to extract project and database from a path
 // Path format: projects/{project_id}/databases/(default)/documents/...
-fn extract_database_path(path: &str) -> String {
+pub(crate) fn extract_database_path(path: &str) -> String {
     let parts: Vec<&str> = path.split("/documents").collect();
     if parts.len() > 0 {
         parts[0].to_string()
@@ -129,7 +132,7 @@ fn extract_database_path(path: &str) -> String {
 // Helper to extract parent path and collection ID
 // Input: .../documents/users
 // Output: (parent_path, "users") where parent_path is relative (projects/...)
-fn extract_parent_and_collection(path: &str) -> Option<(String, String)> {
+pub(crate) fn extract_parent_and_collection(path: &str) -> Option<(String, String)> {
     // Find where "projects/" starts
     let start = path.find("projects/")?;
     let resource_path = &path[start..];
@@ -254,14 +257,6 @@ impl<'a> DocumentReference<'a> {
     }
 
     /// Listens to changes to the document.
-    ///
-    /// This method establishes a streaming connection to Firestore and returns a stream of
-    /// `ListenResponse` events. These events include document changes (`DocumentChange`),
-    /// target changes (`TargetChange`), and other state updates.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `ListenStream` which yields `Result<ListenResponse, FirestoreError>`.
     pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
         let database = extract_database_path(&self.path);
 
@@ -343,13 +338,6 @@ impl<'a> CollectionReference<'a> {
     }
 
     /// Listens to changes in the collection.
-    ///
-    /// This method establishes a streaming connection to Firestore and returns a stream of
-    /// `ListenResponse` events. It effectively performs a query for all documents in this collection.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `ListenStream` which yields `Result<ListenResponse, FirestoreError>`.
     pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
         let database = extract_database_path(&self.path);
         let (parent, collection_id) = extract_parent_and_collection(&self.path).ok_or_else(|| {
@@ -390,5 +378,22 @@ impl<'a> CollectionReference<'a> {
         };
 
         listen_request(self.client, &database, &request).await
+    }
+
+    /// Executes a structured query against the collection.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The query definition.
+    pub async fn query(&self, mut query: Query) -> Result<Vec<Document>, FirestoreError> {
+        let database_path = extract_database_path(&self.path);
+        let (parent, collection_id) = extract_parent_and_collection(&self.path).ok_or_else(|| {
+            FirestoreError::ApiError("Failed to extract parent and collection ID".into())
+        })?;
+
+        // Ensure the query targets this collection
+        query = query.from(&collection_id, false);
+
+        run_query_request(self.client, &database_path, &parent, query.structured_query).await
     }
 }

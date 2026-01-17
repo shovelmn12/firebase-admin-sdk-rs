@@ -12,9 +12,14 @@
 
 pub mod listen;
 pub mod models;
+pub mod query;
 pub mod reference;
+pub mod transaction;
 
+use self::models::{BeginTransactionRequest, BeginTransactionResponse};
 use self::reference::{CollectionReference, DocumentReference};
+use self::transaction::Transaction;
+pub use self::query::Query;
 use crate::core::middleware::AuthMiddleware;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -87,5 +92,41 @@ impl FirebaseFirestore {
             client: &self.client,
             path: format!("{}/{}", self.base_url, document_path),
         }
+    }
+
+    /// Starts a new transaction.
+    ///
+    /// # Returns
+    ///
+    /// A `Transaction` object that can be used to read and write documents atomically.
+    pub async fn begin_transaction(&self) -> Result<Transaction<'_>, FirestoreError> {
+        let url = format!("{}:beginTransaction", self.base_url);
+
+        let request = BeginTransactionRequest {
+            options: None, // Default to ReadWrite
+        };
+
+        let response = self.client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(FirestoreError::ApiError(format!(
+                "Begin transaction failed {}: {}",
+                status, text
+            )));
+        }
+
+        let result: BeginTransactionResponse = response.json().await?;
+
+        Ok(Transaction::new(
+            &self.client,
+            self.base_url.clone(),
+            result.transaction,
+        ))
     }
 }

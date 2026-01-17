@@ -6,7 +6,9 @@ use std::collections::HashMap;
 pub struct Document {
     pub name: String,
     pub fields: HashMap<String, Value>,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub create_time: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub update_time: String,
 }
 
@@ -220,7 +222,7 @@ pub struct Status {
 
 // --- Structured Query Models ---
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StructuredQuery {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -354,4 +356,167 @@ pub struct Cursor {
     pub values: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<bool>,
+}
+
+// --- Transaction & Write Models ---
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BeginTransactionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<TransactionOptions>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionOptions {
+    #[serde(flatten)]
+    pub mode: Option<TransactionMode>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum TransactionMode {
+    ReadOnly(ReadOnlyOptions),
+    ReadWrite(ReadWriteOptions),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadOnlyOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadWriteOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_transaction: Option<String>, // bytes
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BeginTransactionResponse {
+    pub transaction: String, // bytes
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRequest {
+    pub database: String,
+    pub writes: Vec<Write>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<String>, // bytes
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_results: Option<Vec<WriteResult>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transform_results: Option<Vec<Value>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Write {
+    #[serde(flatten)]
+    pub operation: Option<WriteOperation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_mask: Option<DocumentMask>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_document: Option<Precondition>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum WriteOperation {
+    Update(Document),
+    Delete(String),
+    Transform(DocumentTransform),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentMask {
+    pub field_paths: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Precondition {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exists: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_time: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentTransform {
+    pub document: String,
+    pub field_transforms: Vec<FieldTransform>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldTransform {
+    pub field_path: String,
+    #[serde(flatten)]
+    pub transform_type: FieldTransformType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum FieldTransformType {
+    SetToServerValue(ServerValue),
+    Increment(Value),
+    Maximum(Value),
+    Minimum(Value),
+    AppendMissingElements(ArrayValue),
+    RemoveAllFromArray(ArrayValue),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ServerValue {
+    RequestTime,
+}
+
+// --- RunQuery Models ---
+// Note: reusing StructuredQuery from above.
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RunQueryRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_query: Option<StructuredQuery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<String>, // bytes
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RunQueryResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction: Option<String>, // bytes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document: Option<Document>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped_results: Option<i32>,
 }
