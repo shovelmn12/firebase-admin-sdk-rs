@@ -3,10 +3,12 @@ use super::models::{
     ArrayValue, CollectionSelector, Document, DocumentsTarget, ListenRequest, ListDocumentsResponse,
     MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value, ValueType,
 };
+use super::query::Query;
+use super::snapshot::{DocumentSnapshot, WriteResult};
 use super::FirestoreError;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
-use serde::de::{DeserializeOwned, Error};
+use serde::de::Error;
 use serde::ser::Error as SerError;
 use serde::Serialize;
 use serde_json::map::Map;
@@ -145,7 +147,7 @@ fn extract_parent_and_collection(path: &str) -> Option<(String, String)> {
 }
 
 /// A reference to a document in a Firestore database.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DocumentReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
     pub(crate) path: String,
@@ -156,12 +158,20 @@ impl<'a> DocumentReference<'a> {
     ///
     /// # Returns
     ///
-    /// A `Result` containing `Some(T)` if the document exists, or `None` if it does not.
-    pub async fn get<T: DeserializeOwned>(&self) -> Result<Option<T>, FirestoreError> {
+    /// A `Result` containing a `DocumentSnapshot`.
+    pub async fn get(&self) -> Result<DocumentSnapshot<'a>, FirestoreError> {
         let response = self.client.get(&self.path).send().await?;
 
+        // Extract ID from path
+        let id = self.path.split('/').last().unwrap_or_default().to_string();
+
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
+            return Ok(DocumentSnapshot {
+                id,
+                reference: self.clone(),
+                document: None,
+                read_time: None, // We don't get read time on 404 easily unless we parse error body
+            });
         }
 
         if !response.status().is_success() {
@@ -174,9 +184,22 @@ impl<'a> DocumentReference<'a> {
         }
 
         let doc: Document = response.json().await?;
-        let serde_value = convert_fields_to_serde_value(doc.fields)?;
-        let obj = serde_json::from_value(serde_value)?;
-        Ok(Some(obj))
+        let read_time = Some(chrono::Utc::now().to_rfc3339()); // Approx read time as header parsing is manual
+
+        Ok(DocumentSnapshot {
+            id,
+            reference: self.clone(),
+            document: Some(doc),
+            read_time,
+        })
+    }
+
+    /// Gets a `CollectionReference` instance that refers to the subcollection at the specified path.
+    pub fn collection(&self, collection_id: &str) -> CollectionReference<'a> {
+        CollectionReference {
+            client: self.client,
+            path: format!("{}/{}", self.path, collection_id),
+        }
     }
 
     /// Writes to the document referred to by this `DocumentReference`.
@@ -186,7 +209,7 @@ impl<'a> DocumentReference<'a> {
     /// # Arguments
     ///
     /// * `value` - The data to write to the document.
-    pub async fn set<T: Serialize>(&self, value: &T) -> Result<(), FirestoreError> {
+    pub async fn set<T: Serialize>(&self, value: &T) -> Result<WriteResult, FirestoreError> {
         let url = self.path.clone();
 
         let fields = convert_serializable_to_fields(value)?;
@@ -210,7 +233,10 @@ impl<'a> DocumentReference<'a> {
             )));
         }
 
-        Ok(())
+        let doc: Document = response.json().await?;
+        Ok(WriteResult {
+            write_time: doc.update_time,
+        })
     }
 
     /// Updates fields in the document referred to by this `DocumentReference`.
@@ -225,7 +251,7 @@ impl<'a> DocumentReference<'a> {
         &self,
         value: &T,
         update_mask: Option<Vec<String>>,
-    ) -> Result<(), FirestoreError> {
+    ) -> Result<WriteResult, FirestoreError> {
         let fields = convert_serializable_to_fields(value)?;
 
         let mut url = self.path.clone();
@@ -258,11 +284,14 @@ impl<'a> DocumentReference<'a> {
             )));
         }
 
-        Ok(())
+        let doc: Document = response.json().await?;
+        Ok(WriteResult {
+            write_time: doc.update_time,
+        })
     }
 
     /// Deletes the document referred to by this `DocumentReference`.
-    pub async fn delete(&self) -> Result<(), FirestoreError> {
+    pub async fn delete(&self) -> Result<WriteResult, FirestoreError> {
         let response = self.client.delete(&self.path).send().await?;
 
         if !response.status().is_success() {
@@ -274,18 +303,16 @@ impl<'a> DocumentReference<'a> {
             )));
         }
 
-        Ok(())
+        // Delete returns an empty object on success, or a status.
+        // We can synthesize a write time or check if headers provide one?
+        // Firestore REST API delete returns Empty.
+        // So we might default to current time.
+        Ok(WriteResult {
+            write_time: chrono::Utc::now().to_rfc3339(),
+        })
     }
 
     /// Listens to changes to the document.
-    ///
-    /// This method establishes a streaming connection to Firestore and returns a stream of
-    /// `ListenResponse` events. These events include document changes (`DocumentChange`),
-    /// target changes (`TargetChange`), and other state updates.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `ListenStream` which yields `Result<ListenResponse, FirestoreError>`.
     pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
         let database = extract_database_path(&self.path);
 
@@ -312,7 +339,7 @@ impl<'a> DocumentReference<'a> {
 }
 
 /// A reference to a collection in a Firestore database.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CollectionReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
     pub(crate) path: String,
@@ -353,7 +380,7 @@ impl<'a> CollectionReference<'a> {
     /// # Arguments
     ///
     /// * `value` - The data to write to the new document.
-    pub async fn add<T: Serialize>(&self, value: &T) -> Result<Document, FirestoreError> {
+    pub async fn add<T: Serialize>(&self, value: &T) -> Result<DocumentReference<'a>, FirestoreError> {
         let fields = convert_serializable_to_fields(value)?;
         let body = serde_json::to_vec(&serde_json::json!({ "fields": fields }))?;
 
@@ -375,17 +402,45 @@ impl<'a> CollectionReference<'a> {
         }
 
         let doc: Document = response.json().await?;
-        Ok(doc)
+        Ok(DocumentReference {
+            client: self.client,
+            path: doc.name,
+        })
+    }
+
+    /// Creates and returns a new `Query` with the additional filter.
+    pub fn where_filter<T: Serialize>(
+        &self,
+        field: &str,
+        op: &str,
+        value: T,
+    ) -> Result<Query<'a>, FirestoreError> {
+        self.query().where_filter(field, op, value)
+    }
+
+    /// Creates and returns a new `Query` that's additionally sorted by the specified field.
+    pub fn order_by(&self, field: &str, direction: super::models::Direction) -> Query<'a> {
+        self.query().order_by(field, direction)
+    }
+
+    /// Creates and returns a new `Query` that only returns the first matching documents.
+    pub fn limit(&self, limit: i32) -> Query<'a> {
+        self.query().limit(limit)
+    }
+
+    /// Creates and returns a new `Query` that skips the first matching documents.
+    pub fn offset(&self, offset: i32) -> Query<'a> {
+        self.query().offset(offset)
+    }
+
+    fn query(&self) -> Query<'a> {
+        let (parent, collection_id) = extract_parent_and_collection(&self.path)
+            .expect("Collection path should be valid");
+
+        Query::new(self.client, parent, collection_id)
     }
 
     /// Listens to changes in the collection.
-    ///
-    /// This method establishes a streaming connection to Firestore and returns a stream of
-    /// `ListenResponse` events. It effectively performs a query for all documents in this collection.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `ListenStream` which yields `Result<ListenResponse, FirestoreError>`.
     pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
         let database = extract_database_path(&self.path);
         let (parent, collection_id) = extract_parent_and_collection(&self.path).ok_or_else(|| {
