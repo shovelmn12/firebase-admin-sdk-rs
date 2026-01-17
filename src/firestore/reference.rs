@@ -144,6 +144,7 @@ fn extract_parent_and_collection(path: &str) -> Option<(String, String)> {
     Some((parent.to_string(), collection_id.to_string()))
 }
 
+/// A reference to a document in a Firestore database.
 #[derive(Clone)]
 pub struct DocumentReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
@@ -151,6 +152,11 @@ pub struct DocumentReference<'a> {
 }
 
 impl<'a> DocumentReference<'a> {
+    /// Reads the document referenced by this `DocumentReference`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing `Some(T)` if the document exists, or `None` if it does not.
     pub async fn get<T: DeserializeOwned>(&self) -> Result<Option<T>, FirestoreError> {
         let response = self.client.get(&self.path).send().await?;
 
@@ -173,6 +179,13 @@ impl<'a> DocumentReference<'a> {
         Ok(Some(obj))
     }
 
+    /// Writes to the document referred to by this `DocumentReference`.
+    ///
+    /// If the document does not exist, it will be created. If it does exist, it will be overwritten.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The data to write to the document.
     pub async fn set<T: Serialize>(&self, value: &T) -> Result<(), FirestoreError> {
         let url = self.path.clone();
 
@@ -200,6 +213,14 @@ impl<'a> DocumentReference<'a> {
         Ok(())
     }
 
+    /// Updates fields in the document referred to by this `DocumentReference`.
+    ///
+    /// If the document does not exist, the update will fail.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The data to update.
+    /// * `update_mask` - An optional list of field paths to update. If provided, only the fields in the mask will be updated.
     pub async fn update<T: Serialize>(
         &self,
         value: &T,
@@ -240,6 +261,7 @@ impl<'a> DocumentReference<'a> {
         Ok(())
     }
 
+    /// Deletes the document referred to by this `DocumentReference`.
     pub async fn delete(&self) -> Result<(), FirestoreError> {
         let response = self.client.delete(&self.path).send().await?;
 
@@ -289,6 +311,7 @@ impl<'a> DocumentReference<'a> {
     }
 }
 
+/// A reference to a collection in a Firestore database.
 #[derive(Clone)]
 pub struct CollectionReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
@@ -296,6 +319,11 @@ pub struct CollectionReference<'a> {
 }
 
 impl<'a> CollectionReference<'a> {
+    /// Gets a `DocumentReference` for the document within the collection with the specified ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `document_id` - The ID of the document.
     pub fn doc(&self, document_id: &str) -> DocumentReference<'a> {
         DocumentReference {
             client: self.client,
@@ -303,6 +331,7 @@ impl<'a> CollectionReference<'a> {
         }
     }
 
+    /// Lists documents in this collection.
     pub async fn list_documents(&self) -> Result<ListDocumentsResponse, FirestoreError> {
         let response = self.client.get(&self.path).send().await?;
 
@@ -319,6 +348,11 @@ impl<'a> CollectionReference<'a> {
         Ok(list)
     }
 
+    /// Adds a new document to this collection with an auto-generated ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The data to write to the new document.
     pub async fn add<T: Serialize>(&self, value: &T) -> Result<Document, FirestoreError> {
         let fields = convert_serializable_to_fields(value)?;
         let body = serde_json::to_vec(&serde_json::json!({ "fields": fields }))?;

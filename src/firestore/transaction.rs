@@ -1,7 +1,6 @@
 use super::models::{
-    BeginTransactionRequest, BeginTransactionResponse, CommitRequest, CommitResponse, Document,
-    DocumentMask, Precondition, ReadWriteOptions, RollbackRequest, TransactionMode,
-    TransactionOptions, Write, WriteOperation, WriteResult,
+    CommitRequest, CommitResponse, Document, DocumentMask, Precondition, Write, WriteOperation,
+    WriteResult,
 };
 use super::reference::{convert_fields_to_serde_value, convert_serializable_to_fields};
 use super::FirestoreError;
@@ -39,6 +38,10 @@ impl<'a> Transaction<'a> {
     /// Reads the document at the given path.
     ///
     /// The read is performed as part of the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `document_path` - The path to the document to read.
     pub async fn get<T: DeserializeOwned>(
         &self,
         document_path: &str,
@@ -79,24 +82,17 @@ impl<'a> Transaction<'a> {
     /// Overwrites the document referred to by `document_path`.
     ///
     /// If the document does not exist, it will be created. If it does exist, it will be overwritten.
+    ///
+    /// # Arguments
+    ///
+    /// * `document_path` - The path to the document to write.
+    /// * `value` - The data to write.
     pub fn set<T: Serialize>(
         &self,
         document_path: &str,
         value: &T,
     ) -> Result<&Self, FirestoreError> {
         let fields = convert_serializable_to_fields(value)?;
-        let full_name = format!("{}/{}", self.base_url, document_path)
-            .replace("https://firestore.googleapis.com/v1/", ""); // Write ops use the resource name, which doesn't have the domain
-
-        // But wait, `base_url` contains `https://firestore.googleapis.com/v1/projects/.../documents`.
-        // The `Write` object expects `name` (for delete) or `update.name` (for update).
-        // The API expects the fully qualified resource name: `projects/{project_id}/databases/{databaseId}/documents/{document_path}`.
-        // Our `base_url` is exactly that but with the https prefix.
-        // So we need to strip the protocol and domain.
-        // Actually, let's verify what `base_url` is in `mod.rs`.
-        // It is `https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents`.
-        // So stripping everything before "projects/" is the right move, or just using the path from the URL.
-
         let resource_name = self.extract_resource_name(document_path);
 
         let write = Write {
@@ -118,6 +114,11 @@ impl<'a> Transaction<'a> {
     /// Updates fields in the document referred to by `document_path`.
     ///
     /// If the document does not exist, the transaction will fail.
+    ///
+    /// # Arguments
+    ///
+    /// * `document_path` - The path to the document to update.
+    /// * `value` - The data to update.
     pub fn update<T: Serialize>(
         &self,
         document_path: &str,
@@ -154,6 +155,10 @@ impl<'a> Transaction<'a> {
     }
 
     /// Deletes the document referred to by `document_path`.
+    ///
+    /// # Arguments
+    ///
+    /// * `document_path` - The path to the document to delete.
     pub fn delete(&self, document_path: &str) -> Result<&Self, FirestoreError> {
         let resource_name = self.extract_resource_name(document_path);
 

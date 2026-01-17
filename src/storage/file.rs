@@ -15,22 +15,39 @@ pub struct File {
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ObjectMetadata {
+    /// The name of the object.
     pub name: Option<String>,
+    /// The bucket containing the object.
     pub bucket: Option<String>,
+    /// The content generation of this object. Used for object versioning.
     pub generation: Option<String>,
+    /// The version of the metadata for this object at this generation.
     pub metageneration: Option<String>,
+    /// Content-Type of the object data.
     pub content_type: Option<String>,
+    /// The creation time of the object.
     pub time_created: Option<String>,
+    /// The modification time of the object metadata.
     pub updated: Option<String>,
+    /// Storage class of the object.
     pub storage_class: Option<String>,
+    /// Content-Length of the data in bytes.
     pub size: Option<String>,
+    /// MD5 hash of the data; encoded using base64.
     pub md5_hash: Option<String>,
+    /// Media download link.
     pub media_link: Option<String>,
+    /// Content-Encoding of the object data.
     pub content_encoding: Option<String>,
+    /// Content-Disposition of the object data.
     pub content_disposition: Option<String>,
+    /// Cache-Control directive for the object data.
     pub cache_control: Option<String>,
+    /// User-provided metadata, in key/value pairs.
     pub metadata: Option<std::collections::HashMap<String, String>>,
+    /// CRC32c checksum, as described in RFC 4960, Appendix B; encoded using base64.
     pub crc32c: Option<String>,
+    /// HTTP 1.1 Entity tag for the object.
     pub etag: Option<String>,
 }
 
