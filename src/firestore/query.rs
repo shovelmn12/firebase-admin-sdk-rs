@@ -55,29 +55,15 @@ impl<'a> Query<'a> {
     /// # Arguments
     ///
     /// * `field` - The path of the field to filter (e.g., "age").
-    /// * `op` - The operation to apply (e.g., "==").
+    /// * `op` - The operation to apply.
     /// * `value` - The value to compare against.
     pub fn where_filter<T: Serialize>(
         &self,
         field: &str,
-        op: &str,
+        op: FieldOperator,
         value: T,
     ) -> Result<Query<'a>, FirestoreError> {
         let mut new_query = self.clone();
-
-        let operator = match op {
-            "<" => FieldOperator::LessThan,
-            "<=" => FieldOperator::LessThanOrEqual,
-            ">" => FieldOperator::GreaterThan,
-            ">=" => FieldOperator::GreaterThanOrEqual,
-            "==" => FieldOperator::Equal,
-            "!=" => FieldOperator::NotEqual,
-            "array-contains" => FieldOperator::ArrayContains,
-            "in" => FieldOperator::In,
-            "array-contains-any" => FieldOperator::ArrayContainsAny,
-            "not-in" => FieldOperator::NotIn,
-            _ => return Err(FirestoreError::ApiError(format!("Invalid operator: {}", op))),
-        };
 
         let serde_value = serde_json::to_value(value)?;
         let firestore_value = convert_serde_value_to_firestore_value(serde_value)?;
@@ -87,7 +73,7 @@ impl<'a> Query<'a> {
                 field: FieldReference {
                     field_path: field.to_string(),
                 },
-                op: operator,
+                op,
                 value: firestore_value,
             })),
         };

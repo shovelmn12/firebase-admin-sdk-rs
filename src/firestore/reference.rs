@@ -1,7 +1,8 @@
 use super::listen::{listen_request, ListenStream};
 use super::models::{
-    ArrayValue, CollectionSelector, Document, DocumentsTarget, ListenRequest, ListDocumentsResponse,
-    MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value, ValueType,
+    ArrayValue, CollectionSelector, Document, DocumentsTarget, FieldOperator, ListenRequest,
+    ListDocumentsResponse, MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value,
+    ValueType,
 };
 use super::query::Query;
 use super::snapshot::{DocumentSnapshot, WriteResult};
@@ -412,7 +413,7 @@ impl<'a> CollectionReference<'a> {
     pub fn where_filter<T: Serialize>(
         &self,
         field: &str,
-        op: &str,
+        op: FieldOperator,
         value: T,
     ) -> Result<Query<'a>, FirestoreError> {
         self.query().where_filter(field, op, value)
