@@ -16,10 +16,12 @@ pub mod query;
 pub mod reference;
 pub mod snapshot;
 pub mod transaction;
+pub mod batch;
 
 // #[cfg(test)]
 // mod tests;
 
+use self::batch::WriteBatch;
 use self::reference::{CollectionReference, DocumentReference};
 use self::transaction::Transaction;
 use crate::core::middleware::AuthMiddleware;
@@ -113,6 +115,11 @@ impl FirebaseFirestore {
             client: &self.client,
             path: format!("{}/{}", self.base_url, document_path),
         }
+    }
+
+    /// Creates a write batch, used for performing multiple writes as a single atomic operation.
+    pub fn batch(&self) -> WriteBatch<'_> {
+        WriteBatch::new(&self.client, self.base_url.clone())
     }
 
     /// Begins a new transaction.
