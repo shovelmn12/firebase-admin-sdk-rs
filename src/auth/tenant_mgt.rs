@@ -207,8 +207,7 @@ impl TenantAwareness {
 
     /// Returns a `FirebaseAuth` instance scoped to the specified tenant.
     pub fn auth_for_tenant(&self, tenant_id: &str) -> FirebaseAuth {
-        let mut middleware = self.middleware.clone();
-        middleware.set_tenant_id(tenant_id);
+        let middleware = self.middleware.with_tenant(tenant_id);
         FirebaseAuth::new(middleware)
     }
 
