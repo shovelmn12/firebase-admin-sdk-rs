@@ -1,9 +1,12 @@
+use super::listen::{listen_request, ListenStream};
 use super::models::{
     CollectionSelector, CompositeFilter, CompositeOperator, Direction, FieldFilter, FieldOperator,
-    FieldReference, FilterType, Order, QueryFilter, RunQueryRequest, RunQueryResponse,
-    StructuredQuery,
+    FieldReference, FilterType, ListenRequest, Order, QueryFilter, QueryTarget, RunQueryRequest,
+    RunQueryResponse, StructuredQuery, Target, TargetType,
 };
-use super::reference::{convert_serde_value_to_firestore_value, DocumentReference};
+use super::reference::{
+    convert_serde_value_to_firestore_value, extract_database_path, DocumentReference,
+};
 use super::snapshot::{DocumentSnapshot, QuerySnapshot};
 use super::FirestoreError;
 use reqwest::header;
@@ -221,5 +224,33 @@ impl<'a> Query<'a> {
             documents,
             read_time,
         })
+    }
+
+    /// Listens to changes to the query results.
+    pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
+        let database = extract_database_path(&self.parent_path);
+
+        let query_target = QueryTarget {
+            parent: self.parent_path.clone(),
+            structured_query: Some(self.query.clone()),
+        };
+
+        let target = Target {
+            target_type: Some(TargetType::Query(query_target)),
+            target_id: Some(1), // Arbitrary ID
+            resume_token: None,
+            read_time: None,
+            once: None,
+            expected_count: None,
+        };
+
+        let request = ListenRequest {
+            database: database.clone(),
+            add_target: Some(target),
+            remove_target: None,
+            labels: None,
+        };
+
+        listen_request(self.client, &database, &request).await
     }
 }

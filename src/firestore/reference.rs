@@ -120,7 +120,7 @@ pub(crate) fn convert_serde_value_to_firestore_value(
 
 // Helper to extract project and database from a path
 // Path format: projects/{project_id}/databases/(default)/documents/...
-fn extract_database_path(path: &str) -> String {
+pub(crate) fn extract_database_path(path: &str) -> String {
     let parts: Vec<&str> = path.split("/documents").collect();
     if parts.len() > 0 {
         parts[0].to_string()
