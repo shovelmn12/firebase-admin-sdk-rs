@@ -7,7 +7,7 @@ A Rust implementation of the Firebase Admin SDK. This library allows you to inte
 -   **Authentication**: User management (create, update, delete, list, get), ID token verification, and custom token creation.
 -   **Cloud Messaging (FCM)**: Send messages (single, batch, multicast), manage topics, and support for all target types (token, topic, condition).
 -   **Remote Config**: Get the active template, publish new templates (with ETag optimistic concurrency), rollback to previous versions, and list versions.
--   **Firestore**: Read and write documents using a `CollectionReference` and `DocumentReference` API similar to the official Node.js SDK.
+-   **Firestore**: Read and write documents using a `CollectionReference` and `DocumentReference` API similar to the official Node.js SDK. Supports real-time updates via the `listen()` API.
  -   **Storage**: Upload, download, and manage files in Google Cloud Storage buckets.
  -   **Crashlytics**: Programmatically remove crash reports for specific users (e.g., for privacy compliance).
 
@@ -20,6 +20,7 @@ Add this to your `Cargo.toml`:
 firebase-admin-sdk = "0.1.0" # Replace with actual version
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
+futures = "0.3" # Required for Firestore Listen API streams
 ```
 
 ## Usage
@@ -122,6 +123,32 @@ async fn add_document(app: &firebase_admin_sdk::FirebaseApp) {
     match doc_ref.set(&data).await {
         Ok(_) => println!("Document saved"),
         Err(e) => eprintln!("Error: {}", e),
+    }
+}
+```
+
+### Firestore Listen Example (Real-time Updates)
+
+You can listen for real-time updates on a document or an entire collection using the `listen()` method.
+
+```rust
+use futures::stream::StreamExt;
+
+async fn listen_to_document(app: &firebase_admin_sdk::FirebaseApp) {
+    let firestore = app.firestore();
+    let doc_ref = firestore.collection("users").doc("user1");
+
+    let mut stream = doc_ref.listen().await.expect("Failed to create stream");
+
+    while let Some(response_result) = stream.next().await {
+        match response_result {
+            Ok(response) => {
+                if let Some(change) = response.document_change {
+                    println!("Document changed: {:?}", change.document);
+                }
+            }
+            Err(e) => eprintln!("Stream error: {}", e),
+        }
     }
 }
 ```

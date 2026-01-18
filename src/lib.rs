@@ -29,23 +29,35 @@
 //! }
 //! ```
 
+#[cfg(feature = "auth")]
 pub mod auth;
 pub mod core;
+#[cfg(feature = "crashlytics")]
 pub mod crashlytics;
+#[cfg(feature = "firestore")]
 pub mod firestore;
+#[cfg(feature = "messaging")]
 pub mod messaging;
+#[cfg(feature = "remote_config")]
 pub mod remote_config;
+#[cfg(feature = "storage")]
 pub mod storage;
 
 // Re-export yup_oauth2 for user convenience so they don't need to add it separately
 pub use yup_oauth2;
 
+#[cfg(feature = "auth")]
 use auth::FirebaseAuth;
 use core::middleware::AuthMiddleware;
+#[cfg(feature = "crashlytics")]
 use crashlytics::FirebaseCrashlytics;
+#[cfg(feature = "firestore")]
 use firestore::FirebaseFirestore;
+#[cfg(feature = "messaging")]
 use messaging::FirebaseMessaging;
+#[cfg(feature = "remote_config")]
 use remote_config::FirebaseRemoteConfig;
+#[cfg(feature = "storage")]
 use storage::FirebaseStorage;
 use yup_oauth2::ServiceAccountKey;
 
@@ -77,31 +89,37 @@ impl FirebaseApp {
     }
 
     /// Returns a client for interacting with Firebase Authentication.
+    #[cfg(feature = "auth")]
     pub fn auth(&self) -> FirebaseAuth {
         FirebaseAuth::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Firebase Cloud Messaging (FCM).
+    #[cfg(feature = "messaging")]
     pub fn messaging(&self) -> FirebaseMessaging {
         FirebaseMessaging::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Firebase Remote Config.
+    #[cfg(feature = "remote_config")]
     pub fn remote_config(&self) -> FirebaseRemoteConfig {
         FirebaseRemoteConfig::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Firebase Crashlytics.
+    #[cfg(feature = "crashlytics")]
     pub fn crashlytics(&self) -> FirebaseCrashlytics {
         FirebaseCrashlytics::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Cloud Firestore.
+    #[cfg(feature = "firestore")]
     pub fn firestore(&self) -> FirebaseFirestore {
         FirebaseFirestore::new(self.middleware.clone())
     }
 
     /// Returns a client for interacting with Firebase Storage.
+    #[cfg(feature = "storage")]
     pub fn storage(&self) -> FirebaseStorage {
         FirebaseStorage::new(self.middleware.clone())
     }

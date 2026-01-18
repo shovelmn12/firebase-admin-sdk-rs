@@ -4,14 +4,11 @@ use tokio::sync::OnceCell;
 use yup_oauth2::{ServiceAccountAuthenticator, ServiceAccountKey};
 use yup_oauth2::authenticator::Authenticator;
 use hyper_rustls::HttpsConnector;
-use hyper::client::HttpConnector;
+use hyper_util::client::legacy::connect::HttpConnector;
 use http::Extensions;
 use std::sync::Arc;
 
 /// The concrete type of the Authenticator used by `yup-oauth2`.
-///
-/// In `yup-oauth2` v8 (which relies on `hyper` 0.14), the `Authenticator` is generic over the connector.
-/// We use `hyper_rustls` to provide the HTTPS connector.
 type AuthType = Authenticator<HttpsConnector<HttpConnector>>;
 
 /// A middleware that handles OAuth2 authentication for Firebase requests.
@@ -29,6 +26,8 @@ pub struct AuthMiddleware {
     pub key: ServiceAccountKey,
     /// A lazy-initialized authenticator instance.
     authenticator: Arc<OnceCell<AuthType>>,
+    /// Optional Tenant ID for multi-tenancy.
+    tenant_id: Option<String>,
 }
 
 impl AuthMiddleware {
@@ -41,7 +40,22 @@ impl AuthMiddleware {
         Self {
             key,
             authenticator: Arc::new(OnceCell::new()),
+            tenant_id: None,
         }
+    }
+
+    /// Creates a new `AuthMiddleware` instance with a specific Tenant ID.
+    pub fn with_tenant(&self, tenant_id: &str) -> Self {
+        Self {
+            key: self.key.clone(),
+            authenticator: self.authenticator.clone(),
+            tenant_id: Some(tenant_id.to_string()),
+        }
+    }
+
+    /// Gets the current Tenant ID.
+    pub fn tenant_id(&self) -> Option<String> {
+        self.tenant_id.clone()
     }
 
     /// Retrieves a valid OAuth2 token, initializing the authenticator if necessary.

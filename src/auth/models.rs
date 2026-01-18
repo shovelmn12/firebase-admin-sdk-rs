@@ -299,3 +299,22 @@ pub struct ImportUserError {
     /// The error message.
     pub message: String,
 }
+
+/// Request to create a session cookie.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSessionCookieRequest {
+    /// The ID token to exchange for a session cookie.
+    pub id_token: String,
+    /// The number of seconds until the session cookie expires.
+    #[serde(rename = "validDuration")]
+    pub valid_duration_seconds: u64,
+}
+
+/// Response from creating a session cookie.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSessionCookieResponse {
+    /// The created session cookie.
+    pub session_cookie: String,
+}

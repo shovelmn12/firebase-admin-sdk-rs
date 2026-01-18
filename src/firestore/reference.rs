@@ -1,10 +1,15 @@
+use super::listen::{listen_request, ListenStream};
 use super::models::{
-    ArrayValue, Document, ListDocumentsResponse, MapValue, Value, ValueType,
+    ArrayValue, CollectionSelector, Document, DocumentsTarget, FieldOperator, ListenRequest,
+    ListDocumentsResponse, MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value,
+    ValueType,
 };
+use super::query::Query;
+use super::snapshot::{DocumentSnapshot, WriteResult};
 use super::FirestoreError;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
-use serde::de::{DeserializeOwned, Error};
+use serde::de::Error;
 use serde::ser::Error as SerError;
 use serde::Serialize;
 use serde_json::map::Map;
@@ -12,7 +17,7 @@ use serde_json::Value as SerdeValue;
 use std::collections::HashMap;
 
 // Helper to convert Firestore's value map to a standard serde_json::Value
-fn convert_fields_to_serde_value(
+pub(crate) fn convert_fields_to_serde_value(
     fields: HashMap<String, Value>,
 ) -> Result<SerdeValue, FirestoreError> {
     let mut map = Map::new();
@@ -22,7 +27,7 @@ fn convert_fields_to_serde_value(
     Ok(SerdeValue::Object(map))
 }
 
-fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreError> {
+pub(crate) fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreError> {
     use serde_json::json;
     Ok(match value.value_type {
         ValueType::StringValue(s) => SerdeValue::String(s),
@@ -61,7 +66,7 @@ fn convert_value_to_serde_value(value: Value) -> Result<SerdeValue, FirestoreErr
 }
 
 // Helper to convert a serializable Rust struct to Firestore's value map
-fn convert_serializable_to_fields<T: Serialize>(
+pub(crate) fn convert_serializable_to_fields<T: Serialize>(
     value: &T,
 ) -> Result<HashMap<String, Value>, FirestoreError> {
     let serde_value = serde_json::to_value(value)?;
@@ -78,7 +83,9 @@ fn convert_serializable_to_fields<T: Serialize>(
     }
 }
 
-fn convert_serde_value_to_firestore_value(value: SerdeValue) -> Result<Value, FirestoreError> {
+pub(crate) fn convert_serde_value_to_firestore_value(
+    value: SerdeValue,
+) -> Result<Value, FirestoreError> {
     let value_type = match value {
         SerdeValue::Null => ValueType::NullValue(()),
         SerdeValue::Bool(b) => ValueType::BooleanValue(b),
@@ -112,18 +119,60 @@ fn convert_serde_value_to_firestore_value(value: SerdeValue) -> Result<Value, Fi
     Ok(Value { value_type })
 }
 
-#[derive(Clone)]
+// Helper to extract project and database from a path
+// Path format: projects/{project_id}/databases/(default)/documents/...
+pub(crate) fn extract_database_path(path: &str) -> String {
+    let parts: Vec<&str> = path.split("/documents").collect();
+    if parts.len() > 0 {
+        parts[0].to_string()
+    } else {
+        // Fallback
+        path.to_string()
+    }
+}
+
+// Helper to extract parent path and collection ID
+// Input: .../documents/users
+// Output: (parent_path, "users") where parent_path is relative (projects/...)
+fn extract_parent_and_collection(path: &str) -> Option<(String, String)> {
+    // Find where "projects/" starts
+    let start = path.find("projects/")?;
+    let resource_path = &path[start..];
+
+    // Last part is collection ID
+    let slash_idx = resource_path.rfind('/')?;
+    let collection_id = &resource_path[slash_idx + 1..];
+    let parent = &resource_path[..slash_idx];
+
+    Some((parent.to_string(), collection_id.to_string()))
+}
+
+/// A reference to a document in a Firestore database.
+#[derive(Clone, Debug)]
 pub struct DocumentReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
     pub(crate) path: String,
 }
 
 impl<'a> DocumentReference<'a> {
-    pub async fn get<T: DeserializeOwned>(&self) -> Result<Option<T>, FirestoreError> {
+    /// Reads the document referenced by this `DocumentReference`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `DocumentSnapshot`.
+    pub async fn get(&self) -> Result<DocumentSnapshot<'a>, FirestoreError> {
         let response = self.client.get(&self.path).send().await?;
 
+        // Extract ID from path
+        let id = self.path.split('/').last().unwrap_or_default().to_string();
+
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
+            return Ok(DocumentSnapshot {
+                id,
+                reference: self.clone(),
+                document: None,
+                read_time: None, // We don't get read time on 404 easily unless we parse error body
+            });
         }
 
         if !response.status().is_success() {
@@ -136,12 +185,32 @@ impl<'a> DocumentReference<'a> {
         }
 
         let doc: Document = response.json().await?;
-        let serde_value = convert_fields_to_serde_value(doc.fields)?;
-        let obj = serde_json::from_value(serde_value)?;
-        Ok(Some(obj))
+        let read_time = Some(chrono::Utc::now().to_rfc3339()); // Approx read time as header parsing is manual
+
+        Ok(DocumentSnapshot {
+            id,
+            reference: self.clone(),
+            document: Some(doc),
+            read_time,
+        })
     }
 
-    pub async fn set<T: Serialize>(&self, value: &T) -> Result<(), FirestoreError> {
+    /// Gets a `CollectionReference` instance that refers to the subcollection at the specified path.
+    pub fn collection(&self, collection_id: &str) -> CollectionReference<'a> {
+        CollectionReference {
+            client: self.client,
+            path: format!("{}/{}", self.path, collection_id),
+        }
+    }
+
+    /// Writes to the document referred to by this `DocumentReference`.
+    ///
+    /// If the document does not exist, it will be created. If it does exist, it will be overwritten.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The data to write to the document.
+    pub async fn set<T: Serialize>(&self, value: &T) -> Result<WriteResult, FirestoreError> {
         let url = self.path.clone();
 
         let fields = convert_serializable_to_fields(value)?;
@@ -165,14 +234,25 @@ impl<'a> DocumentReference<'a> {
             )));
         }
 
-        Ok(())
+        let doc: Document = response.json().await?;
+        Ok(WriteResult {
+            write_time: doc.update_time,
+        })
     }
 
+    /// Updates fields in the document referred to by this `DocumentReference`.
+    ///
+    /// If the document does not exist, the update will fail.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The data to update.
+    /// * `update_mask` - An optional list of field paths to update. If provided, only the fields in the mask will be updated.
     pub async fn update<T: Serialize>(
         &self,
         value: &T,
         update_mask: Option<Vec<String>>,
-    ) -> Result<(), FirestoreError> {
+    ) -> Result<WriteResult, FirestoreError> {
         let fields = convert_serializable_to_fields(value)?;
 
         let mut url = self.path.clone();
@@ -205,10 +285,14 @@ impl<'a> DocumentReference<'a> {
             )));
         }
 
-        Ok(())
+        let doc: Document = response.json().await?;
+        Ok(WriteResult {
+            write_time: doc.update_time,
+        })
     }
 
-    pub async fn delete(&self) -> Result<(), FirestoreError> {
+    /// Deletes the document referred to by this `DocumentReference`.
+    pub async fn delete(&self) -> Result<WriteResult, FirestoreError> {
         let response = self.client.delete(&self.path).send().await?;
 
         if !response.status().is_success() {
@@ -220,17 +304,54 @@ impl<'a> DocumentReference<'a> {
             )));
         }
 
-        Ok(())
+        // Delete returns an empty object on success, or a status.
+        // We can synthesize a write time or check if headers provide one?
+        // Firestore REST API delete returns Empty.
+        // So we might default to current time.
+        Ok(WriteResult {
+            write_time: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+
+    /// Listens to changes to the document.
+    pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
+        let database = extract_database_path(&self.path);
+
+        let target = Target {
+            target_type: Some(TargetType::Documents(DocumentsTarget {
+                documents: vec![self.path.clone()],
+            })),
+            target_id: Some(1), // Arbitrary ID
+            resume_token: None,
+            read_time: None,
+            once: None,
+            expected_count: None,
+        };
+
+        let request = ListenRequest {
+            database: database.clone(),
+            add_target: Some(target),
+            remove_target: None,
+            labels: None,
+        };
+
+        listen_request(self.client, &database, &request).await
     }
 }
 
-#[derive(Clone)]
+/// A reference to a collection in a Firestore database.
+#[derive(Clone, Debug)]
 pub struct CollectionReference<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
     pub(crate) path: String,
 }
 
 impl<'a> CollectionReference<'a> {
+    /// Gets a `DocumentReference` for the document within the collection with the specified ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `document_id` - The ID of the document.
     pub fn doc(&self, document_id: &str) -> DocumentReference<'a> {
         DocumentReference {
             client: self.client,
@@ -238,6 +359,7 @@ impl<'a> CollectionReference<'a> {
         }
     }
 
+    /// Lists documents in this collection.
     pub async fn list_documents(&self) -> Result<ListDocumentsResponse, FirestoreError> {
         let response = self.client.get(&self.path).send().await?;
 
@@ -254,7 +376,12 @@ impl<'a> CollectionReference<'a> {
         Ok(list)
     }
 
-    pub async fn add<T: Serialize>(&self, value: &T) -> Result<Document, FirestoreError> {
+    /// Adds a new document to this collection with an auto-generated ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The data to write to the new document.
+    pub async fn add<T: Serialize>(&self, value: &T) -> Result<DocumentReference<'a>, FirestoreError> {
         let fields = convert_serializable_to_fields(value)?;
         let body = serde_json::to_vec(&serde_json::json!({ "fields": fields }))?;
 
@@ -276,6 +403,84 @@ impl<'a> CollectionReference<'a> {
         }
 
         let doc: Document = response.json().await?;
-        Ok(doc)
+        Ok(DocumentReference {
+            client: self.client,
+            path: doc.name,
+        })
+    }
+
+    /// Creates and returns a new `Query` with the additional filter.
+    pub fn where_filter<T: Serialize>(
+        &self,
+        field: &str,
+        op: FieldOperator,
+        value: T,
+    ) -> Result<Query<'a>, FirestoreError> {
+        self.query().where_filter(field, op, value)
+    }
+
+    /// Creates and returns a new `Query` that's additionally sorted by the specified field.
+    pub fn order_by(&self, field: &str, direction: super::models::Direction) -> Query<'a> {
+        self.query().order_by(field, direction)
+    }
+
+    /// Creates and returns a new `Query` that only returns the first matching documents.
+    pub fn limit(&self, limit: i32) -> Query<'a> {
+        self.query().limit(limit)
+    }
+
+    /// Creates and returns a new `Query` that skips the first matching documents.
+    pub fn offset(&self, offset: i32) -> Query<'a> {
+        self.query().offset(offset)
+    }
+
+    fn query(&self) -> Query<'a> {
+        let (parent, collection_id) = extract_parent_and_collection(&self.path)
+            .expect("Collection path should be valid");
+
+        Query::new(self.client, parent, collection_id)
+    }
+
+    /// Listens to changes in the collection.
+    pub async fn listen(&self) -> Result<ListenStream, FirestoreError> {
+        let database = extract_database_path(&self.path);
+        let (parent, collection_id) = extract_parent_and_collection(&self.path).ok_or_else(|| {
+            FirestoreError::ApiError("Failed to extract parent and collection ID".into())
+        })?;
+
+        let query_target = QueryTarget {
+            parent,
+            structured_query: Some(StructuredQuery {
+                from: Some(vec![CollectionSelector {
+                    collection_id,
+                    all_descendants: None,
+                }]),
+                select: None,
+                where_clause: None,
+                order_by: None,
+                start_at: None,
+                end_at: None,
+                offset: None,
+                limit: None,
+            }),
+        };
+
+        let target = Target {
+            target_type: Some(TargetType::Query(query_target)),
+            target_id: Some(1), // Arbitrary ID
+            resume_token: None,
+            read_time: None,
+            once: None,
+            expected_count: None,
+        };
+
+        let request = ListenRequest {
+            database: database.clone(),
+            add_target: Some(target),
+            remove_target: None,
+            labels: None,
+        };
+
+        listen_request(self.client, &database, &request).await
     }
 }

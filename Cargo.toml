@@ -4,23 +4,30 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "multipart"] }
-reqwest-middleware = { version = "0.3", features = ["json"] }
-reqwest-retry = "0.5"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-jsonwebtoken = "9"
-yup-oauth2 = "8"
-thiserror = "1.0"
-url = "2.5"
-anyhow = "1.0"
-async-trait = "0.1"
-hyper-rustls = "0.24"
-hyper = "0.14"
-http = "1.0"
-futures = "0.3.31"
-bytes = "1.11.0"
+reqwest = { version = "0.13.1", features = ["json", "rustls"] }
+reqwest-middleware = { version = "0.5.0", features = ["json", "query"] }
+reqwest-retry = "0.9.0"
+tokio = { version = "1.49.0", features = ["full"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
+yup-oauth2 = "12.1.2"
+thiserror = "2.0.18"
+url = "2.5.8"
+anyhow = "1.0.100"
+async-trait = "0.1.89"
+hyper-rustls = "0.27.7"
+hyper-util = { version = "0.1.19", features = ["client-legacy"] }
+http = "1.4.0"
+futures = { version = "0.3.31", optional = true }
+bytes = { version = "1.11.0", optional = true }
+chrono = { version = "0.4.43", features = ["serde"] }
 
-[dev-dependencies]
-httpmock = "0.8.2"
+[features]
+default = ["auth", "crashlytics", "firestore", "messaging", "remote_config", "storage"]
+auth = []
+crashlytics = []
+firestore = ["dep:futures", "dep:bytes"]
+messaging = ["reqwest/multipart"]
+remote_config = []
+storage = ["dep:bytes"]
