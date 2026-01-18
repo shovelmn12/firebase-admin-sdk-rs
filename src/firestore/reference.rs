@@ -1,8 +1,8 @@
 use super::listen::{listen_request, ListenStream};
 use super::models::{
     ArrayValue, CollectionSelector, Document, DocumentsTarget, FieldOperator, ListenRequest,
-    ListDocumentsResponse, MapValue, QueryTarget, StructuredQuery, Target, TargetType, Value,
-    ValueType,
+    ListCollectionIdsRequest, ListCollectionIdsResponse, ListDocumentsResponse, MapValue,
+    QueryTarget, StructuredQuery, Target, TargetType, Value, ValueType,
 };
 use super::query::Query;
 use super::snapshot::{DocumentSnapshot, WriteResult};
@@ -201,6 +201,53 @@ impl<'a> DocumentReference<'a> {
             client: self.client,
             path: format!("{}/{}", self.path, collection_id),
         }
+    }
+
+    /// Lists the subcollections of this document.
+    pub async fn list_collections(&self) -> Result<Vec<CollectionReference<'a>>, FirestoreError> {
+        let url = format!("{}:listCollectionIds", self.path);
+        let mut collections = Vec::new();
+        let mut next_page_token = None;
+
+        loop {
+            let request = ListCollectionIdsRequest {
+                page_size: Some(100),
+                page_token: next_page_token.take(),
+            };
+
+            let response = self
+                .client
+                .post(&url)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(serde_json::to_vec(&request)?)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let text = response.text().await.unwrap_or_default();
+                return Err(FirestoreError::ApiError(format!(
+                    "List collections failed {}: {}",
+                    status, text
+                )));
+            }
+
+            let result: ListCollectionIdsResponse = response.json().await?;
+            for id in result.collection_ids {
+                collections.push(self.collection(&id));
+            }
+
+            if let Some(token) = result.next_page_token {
+                if token.is_empty() {
+                    break;
+                }
+                next_page_token = Some(token);
+            } else {
+                break;
+            }
+        }
+
+        Ok(collections)
     }
 
     /// Writes to the document referred to by this `DocumentReference`.
