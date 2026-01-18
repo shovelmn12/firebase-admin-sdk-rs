@@ -200,7 +200,7 @@ async fn delete_reports(app: &firebase_admin_sdk::FirebaseApp) {
 - [ ] **Realtime Database**: Implement support for reading and writing to the Firebase Realtime Database.
 - [ ] **Machine Learning**: Add support for Firebase ML Model management.
 - [x] **Auth**: Add support for OIDC and SAML provider configuration.
-- [ ] **Storage**: Add support for setting and updating object metadata.
+- [x] **Storage**: Add support for setting and updating object metadata.
 - [ ] **General**: Improve error handling and add more comprehensive integration tests.
 
 ## Architecture and Patterns

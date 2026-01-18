@@ -83,6 +83,17 @@ impl FirebaseStorage {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String, middleware: AuthMiddleware) -> Self {
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
+        Self {
+            client,
+            base_url,
+            project_id,
+            middleware,
+        }
+    }
+
     /// Gets a `Bucket` instance that refers to the specific bucket.
     ///
     /// # Arguments
