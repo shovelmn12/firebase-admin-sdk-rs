@@ -208,7 +208,7 @@ pub struct EmailLinkRequest {
     pub android_minimum_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub android_install_app: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "iOSBundleId", skip_serializing_if = "Option::is_none")]
     pub ios_bundle_id: Option<String>,
 }
 
@@ -317,4 +317,48 @@ pub struct CreateSessionCookieRequest {
 pub struct CreateSessionCookieResponse {
     /// The created session cookie.
     pub session_cookie: String,
+}
+
+// --- Action Code Settings ---
+
+/// Settings for generating email action links.
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionCodeSettings {
+    /// The URL to continue to after the user clicks the link.
+    pub url: String,
+    /// Whether to open the link via a mobile app if installed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handle_code_in_app: Option<bool>,
+    /// iOS specific settings.
+    #[serde(rename = "iOS", skip_serializing_if = "Option::is_none")]
+    pub ios: Option<IosSettings>,
+    /// Android specific settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub android: Option<AndroidSettings>,
+    /// The dynamic link domain to use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dynamic_link_domain: Option<String>,
+}
+
+/// iOS specific settings for action code.
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IosSettings {
+    /// The iOS bundle ID.
+    pub bundle_id: String,
+}
+
+/// Android specific settings for action code.
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidSettings {
+    /// The Android package name.
+    pub package_name: String,
+    /// Whether to install the app if not already installed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_app: Option<bool>,
+    /// The minimum version of the app required.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minimum_version: Option<String>,
 }

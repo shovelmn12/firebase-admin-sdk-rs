@@ -12,7 +12,7 @@ pub mod project_config;
 pub mod project_config_impl;
 
 use crate::auth::models::{
-    CreateSessionCookieRequest, CreateSessionCookieResponse, CreateUserRequest,
+    ActionCodeSettings, CreateSessionCookieRequest, CreateSessionCookieResponse, CreateUserRequest,
     DeleteAccountRequest, EmailLinkRequest, EmailLinkResponse, GetAccountInfoRequest,
     GetAccountInfoResponse, ImportUsersRequest, ImportUsersResponse, ListUsersResponse,
     UpdateUserRequest, UserRecord,
@@ -123,6 +123,34 @@ impl FirebaseAuth {
             verifier,
             middleware,
             tenant_id,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String) -> Self {
+        // We need a dummy middleware and verifier for the struct, but we won't use them for this test
+        // Ideally we'd have a builder or optionals, but for now we construct dummies.
+        let key = yup_oauth2::ServiceAccountKey {
+            key_type: Some("service_account".to_string()),
+            client_email: "test@example.com".to_string(),
+            private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC6\n-----END PRIVATE KEY-----".to_string(),
+            project_id: Some("test-project".to_string()),
+            private_key_id: None,
+            client_id: None,
+            auth_uri: None,
+            token_uri: "https://oauth2.googleapis.com/token".to_string(),
+            auth_provider_x509_cert_url: None,
+            client_x509_cert_url: None,
+        };
+        let middleware = AuthMiddleware::new(key);
+        let verifier = Arc::new(IdTokenVerifier::new("test-project".to_string()));
+
+        Self {
+            client,
+            base_url,
+            verifier,
+            middleware,
+            tenant_id: None,
         }
     }
 
@@ -250,11 +278,10 @@ impl FirebaseAuth {
         &self,
         request_type: &str,
         email: &str,
-        settings: Option<serde_json::Value>,
+        settings: Option<ActionCodeSettings>,
     ) -> Result<String, AuthError> {
         let url = format!("{}/accounts:sendOobCode", self.base_url,);
 
-        // Need to map generic settings to EmailLinkRequest
         let mut request = EmailLinkRequest {
             request_type: request_type.to_string(),
             email: Some(email.to_string()),
@@ -262,11 +289,19 @@ impl FirebaseAuth {
         };
 
         if let Some(s) = settings {
-            // Simplistic mapping for now, ideally pass a struct
-            if let Some(url) = s.get("continueUrl").and_then(|v| v.as_str()) {
-                request.continue_url = Some(url.to_string());
+            request.continue_url = Some(s.url);
+            request.can_handle_code_in_app = s.handle_code_in_app;
+            request.dynamic_link_domain = s.dynamic_link_domain;
+            
+            if let Some(ios) = s.ios {
+                request.ios_bundle_id = Some(ios.bundle_id);
             }
-            // ... map other fields
+
+            if let Some(android) = s.android {
+                request.android_package_name = Some(android.package_name);
+                request.android_install_app = android.install_app;
+                request.android_minimum_version = android.minimum_version;
+            }
         }
 
         let response = self
@@ -294,7 +329,7 @@ impl FirebaseAuth {
     pub async fn generate_password_reset_link(
         &self,
         email: &str,
-        settings: Option<serde_json::Value>,
+        settings: Option<ActionCodeSettings>,
     ) -> Result<String, AuthError> {
         self.generate_email_link("PASSWORD_RESET", email, settings)
             .await
@@ -304,7 +339,7 @@ impl FirebaseAuth {
     pub async fn generate_email_verification_link(
         &self,
         email: &str,
-        settings: Option<serde_json::Value>,
+        settings: Option<ActionCodeSettings>,
     ) -> Result<String, AuthError> {
         self.generate_email_link("VERIFY_EMAIL", email, settings)
             .await
@@ -314,7 +349,7 @@ impl FirebaseAuth {
     pub async fn generate_sign_in_with_email_link(
         &self,
         email: &str,
-        settings: Option<serde_json::Value>,
+        settings: Option<ActionCodeSettings>,
     ) -> Result<String, AuthError> {
         self.generate_email_link("EMAIL_SIGNIN", email, settings)
             .await
@@ -548,3 +583,6 @@ impl FirebaseAuth {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests;
