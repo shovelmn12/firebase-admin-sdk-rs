@@ -35,6 +35,11 @@ impl ProjectConfig {
         Self { client, base_url }
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String) -> Self {
+        Self { client, base_url }
+    }
+
     // --- OIDC Provider Configs ---
 
     pub async fn create_oidc_provider_config(

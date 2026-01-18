@@ -84,3 +84,103 @@ async fn test_generate_email_verification_link() {
     
     mock.assert();
 }
+
+#[tokio::test]
+async fn test_create_oidc_provider_config() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let project_config = ProjectConfig::new_with_client(client, server.url("/v2/projects/test-project"));
+
+    let request = crate::auth::project_config::CreateOidcProviderConfigRequest {
+        oauth_idp_config_id: "oidc.test".to_string(),
+        display_name: Some("Test OIDC".to_string()),
+        enabled: Some(true),
+        client_id: "client-id".to_string(),
+        issuer: "https://issuer.com".to_string(),
+        ..Default::default()
+    };
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v2/projects/test-project/oauthIdpConfigs")
+            .query_param("oauthIdpConfigId", "oidc.test")
+            .json_body(json!({
+                "displayName": "Test OIDC",
+                "enabled": true,
+                "clientId": "client-id",
+                "issuer": "https://issuer.com"
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "projects/test-project/oauthIdpConfigs/oidc.test",
+                "displayName": "Test OIDC",
+                "enabled": true,
+                "clientId": "client-id",
+                "issuer": "https://issuer.com"
+            }));
+    });
+
+    let config = project_config.create_oidc_provider_config(request).await.unwrap();
+    assert_eq!(config.name, "projects/test-project/oauthIdpConfigs/oidc.test");
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_create_saml_provider_config() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let project_config = ProjectConfig::new_with_client(client, server.url("/v2/projects/test-project"));
+
+    let request = crate::auth::project_config::CreateSamlProviderConfigRequest {
+        inbound_saml_config_id: "saml.test".to_string(),
+        display_name: Some("Test SAML".to_string()),
+        enabled: Some(true),
+        idp_config: crate::auth::project_config::SamlIdpConfig {
+            idp_entity_id: Some("idp-entity".to_string()),
+            sso_url: Some("https://sso.com".to_string()),
+            ..Default::default()
+        },
+        sp_config: crate::auth::project_config::SamlSpConfig {
+            sp_entity_id: Some("sp-entity".to_string()),
+            ..Default::default()
+        },
+    };
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v2/projects/test-project/inboundSamlConfigs")
+            .query_param("inboundSamlConfigId", "saml.test")
+            .json_body(json!({
+                "displayName": "Test SAML",
+                "enabled": true,
+                "idpConfig": {
+                    "idpEntityId": "idp-entity",
+                    "ssoUrl": "https://sso.com"
+                },
+                "spConfig": {
+                    "spEntityId": "sp-entity"
+                }
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "projects/test-project/inboundSamlConfigs/saml.test",
+                "displayName": "Test SAML",
+                "enabled": true,
+                "idpConfig": {
+                    "idpEntityId": "idp-entity",
+                    "ssoUrl": "https://sso.com"
+                },
+                "spConfig": {
+                    "spEntityId": "sp-entity"
+                }
+            }));
+    });
+
+    let config = project_config.create_saml_provider_config(request).await.unwrap();
+    assert_eq!(config.name, "projects/test-project/inboundSamlConfigs/saml.test");
+    
+    mock.assert();
+}
