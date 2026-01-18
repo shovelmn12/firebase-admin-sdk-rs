@@ -1,3 +1,4 @@
+use crate::core::middleware::AuthMiddleware;
 use crate::storage::file::File;
 use reqwest_middleware::ClientWithMiddleware;
 
@@ -6,14 +7,21 @@ pub struct Bucket {
     client: ClientWithMiddleware,
     base_url: String,
     name: String,
+    middleware: AuthMiddleware,
 }
 
 impl Bucket {
-    pub(crate) fn new(client: ClientWithMiddleware, base_url: String, name: String) -> Self {
+    pub(crate) fn new(
+        client: ClientWithMiddleware,
+        base_url: String,
+        name: String,
+        middleware: AuthMiddleware,
+    ) -> Self {
         Self {
             client,
             base_url,
             name,
+            middleware,
         }
     }
 
@@ -28,6 +36,12 @@ impl Bucket {
     ///
     /// * `name` - The path to the file within the bucket (e.g., "images/profile.png").
     pub fn file(&self, name: &str) -> File {
-        File::new(self.client.clone(), self.base_url.clone(), self.name.clone(), name.to_string())
+        File::new(
+            self.client.clone(),
+            self.base_url.clone(),
+            self.name.clone(),
+            name.to_string(),
+            self.middleware.clone(),
+        )
     }
 }

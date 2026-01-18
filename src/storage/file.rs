@@ -1,7 +1,13 @@
+use crate::core::middleware::AuthMiddleware;
 use crate::storage::StorageError;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
+use rsa::pkcs1::DecodeRsaPrivateKey;
+use rsa::pkcs8::DecodePrivateKey;
+use rsa::{Pkcs1v15Sign, RsaPrivateKey};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::time::{SystemTime, Duration};
 use url::Url;
 
 /// Represents a file within a Google Cloud Storage bucket.
@@ -10,12 +16,45 @@ pub struct File {
     base_url: String,
     bucket_name: String,
     name: String,
+    middleware: AuthMiddleware,
+}
+
+/// Options for generating a signed URL.
+#[derive(Debug, Clone)]
+pub struct GetSignedUrlOptions {
+    /// The HTTP method to allow.
+    pub method: SignedUrlMethod,
+    /// The expiration time.
+    pub expires: SystemTime,
+    /// The content type (required if the client provides it).
+    pub content_type: Option<String>,
+}
+
+/// Supported HTTP methods for signed URLs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SignedUrlMethod {
+    GET,
+    PUT,
+    POST,
+    DELETE,
+}
+
+impl SignedUrlMethod {
+    fn as_str(&self) -> &'static str {
+        match self {
+            SignedUrlMethod::GET => "GET",
+            SignedUrlMethod::PUT => "PUT",
+            SignedUrlMethod::POST => "POST",
+            SignedUrlMethod::DELETE => "DELETE",
+        }
+    }
 }
 
 /// Metadata for a Google Cloud Storage object.
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ObjectMetadata {
+    // ... (fields remain same)
     /// The name of the object.
     pub name: Option<String>,
     /// The bucket containing the object.
@@ -58,12 +97,14 @@ impl File {
         base_url: String,
         bucket_name: String,
         name: String,
+        middleware: AuthMiddleware,
     ) -> Self {
         Self {
             client,
             base_url,
             bucket_name,
             name,
+            middleware,
         }
     }
 
@@ -75,6 +116,118 @@ impl File {
     /// Returns the name of the bucket containing the file.
     pub fn bucket(&self) -> &str {
         &self.bucket_name
+    }
+
+    /// Generates a V4 signed URL for accessing the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - The options for generating the signed URL.
+    pub fn get_signed_url(&self, options: GetSignedUrlOptions) -> Result<String, StorageError> {
+        let key = &self.middleware.key;
+        let client_email = &key.client_email;
+        let private_key_pem = &key.private_key;
+
+        if client_email.is_empty() || private_key_pem.is_empty() {
+            return Err(StorageError::ProjectIdMissing); // Using existing error enum, though maybe not precise
+        }
+
+                let now = SystemTime::now();
+
+                
+
+                let iso_date = chrono::DateTime::<chrono::Utc>::from(now).format("%Y%m%dT%H%M%SZ").to_string();
+
+        
+        let date_stamp = &iso_date[0..8]; // YYYYMMDD
+
+        let credential_scope = format!("{}/auto/storage/goog4_request", date_stamp);
+
+        let host = "storage.googleapis.com";
+        let canonical_headers = format!("host:{}\n", host);
+        let signed_headers = "host";
+
+        // Canonical Resource
+        let encoded_name = url::form_urlencoded::byte_serialize(self.name.as_bytes())
+            .collect::<String>()
+            .replace("+", "%20");
+
+        let canonical_uri = format!("/{}/{}", self.bucket_name, encoded_name);
+
+        // Calculate expiration in seconds from now
+        let duration_seconds = options
+            .expires
+            .duration_since(now)
+            .unwrap_or(Duration::from_secs(0))
+            .as_secs();
+
+        let mut query_params = vec![
+            ("X-Goog-Algorithm", "GOOG4-RSA-SHA256".to_string()),
+            (
+                "X-Goog-Credential",
+                format!("{}/{}", client_email, credential_scope),
+            ),
+            ("X-Goog-Date", iso_date.clone()),
+            ("X-Goog-Expires", duration_seconds.to_string()),
+            ("X-Goog-SignedHeaders", signed_headers.to_string()),
+        ];
+
+        query_params.sort_by(|a, b| a.0.cmp(b.0));
+        
+        let canonical_query_string = query_params.iter()
+            .map(|(k, v)| {
+                let encoded_k = url::form_urlencoded::byte_serialize(k.as_bytes()).collect::<String>();
+                let encoded_v = url::form_urlencoded::byte_serialize(v.as_bytes()).collect::<String>();
+                format!("{}={}", encoded_k, encoded_v)
+            })
+            .collect::<Vec<_>>()
+            .join("&");
+
+        let payload_hash = "UNSIGNED-PAYLOAD";
+
+        let canonical_request = format!(
+            "{}\n{}\n{}\n{}\n\n{}\n{}",
+            options.method.as_str(),
+            canonical_uri,
+            canonical_query_string,
+            canonical_headers,
+            signed_headers,
+            payload_hash
+        );
+
+        let algorithm = "GOOG4-RSA-SHA256";
+        let request_hash = Sha256::digest(canonical_request.as_bytes());
+        let request_hash_hex = hex::encode(request_hash);
+
+        let string_to_sign = format!(
+            "{}\n{}\n{}\n{}",
+            algorithm, iso_date, credential_scope, request_hash_hex
+        );
+
+        let hash_to_sign = Sha256::digest(string_to_sign.as_bytes());
+
+        let priv_key = if private_key_pem.contains("BEGIN RSA PRIVATE KEY") {
+            RsaPrivateKey::from_pkcs1_pem(private_key_pem).map_err(|e| {
+                StorageError::ApiError(format!("Invalid private key (PKCS1): {}", e))
+            })?
+        } else {
+            RsaPrivateKey::from_pkcs8_pem(private_key_pem).map_err(|e| {
+                StorageError::ApiError(format!("Invalid private key (PKCS8): {}", e))
+            })?
+        };
+
+        let signature = priv_key
+            .sign(Pkcs1v15Sign::new::<Sha256>(), &hash_to_sign)
+            .map_err(|e| StorageError::ApiError(format!("Signing failed: {}", e)))?;
+
+        let signature_hex = hex::encode(signature);
+
+        let final_url = format!(
+            "https://{}{}?{}&X-Goog-Signature={}",
+            host, canonical_uri, canonical_query_string, signature_hex
+        );
+
+        Ok(final_url)
     }
 
     /// Uploads data to the file.
@@ -100,7 +253,7 @@ impl File {
         // For simplicity and enabling tests, let's trust that if the user overrides base_url, they might be pointing to an emulator or mock.
 
         let url = if self.base_url.contains("storage.googleapis.com/storage/v1") {
-             format!(
+            format!(
                 "https://storage.googleapis.com/upload/storage/v1/b/{}/o",
                 self.bucket_name
             )
@@ -108,39 +261,43 @@ impl File {
             // Assume mock/emulator environment where we might append /upload prefix or similar relative to base?
             // Or better: replace "/storage/v1" with "/upload/storage/v1" if present.
             if self.base_url.contains("/storage/v1") {
-                 let upload_base = self.base_url.replace("/storage/v1", "/upload/storage/v1");
-                 format!("{}/b/{}/o", upload_base, self.bucket_name)
+                let upload_base = self.base_url.replace("/storage/v1", "/upload/storage/v1");
+                format!("{}/b/{}/o", upload_base, self.bucket_name)
             } else {
-                 // Fallback: just append /upload if it doesn't match known patterns?
-                 // Or just use base_url as is, assuming the caller set it to the root of the API including 'upload' capability if needed?
-                 // But `download` uses `base_url` too.
-                 // Let's try to be smart for the mock server in tests.
-                 // In tests: base_url is `http://127.0.0.1:PORT`.
-                 // We want `http://127.0.0.1:PORT/upload/storage/v1...`
-                 // But `download` uses `http://127.0.0.1:PORT/b/...` (which implies base_url was root-ish or included /storage/v1?)
-                 // In `FirebaseStorage::new`, base_url is `https://storage.googleapis.com/storage/v1`.
-                 // So `download` appends `/b/...` resulting in `.../storage/v1/b/...`.
-                 // If I set mock url as base_url, say `http://host:port`, `download` does `http://host:port/b/...`.
-                 // So for upload, I should probably target `http://host:port/upload/storage/v1/b/...`?
-                 // Let's try prepending `/upload` to the path relative to the server root, but `base_url` might have a path.
+                // Fallback: just append /upload if it doesn't match known patterns?
+                // Or just use base_url as is, assuming the caller set it to the root of the API including 'upload' capability if needed?
+                // But `download` uses `base_url` too.
+                // Let's try to be smart for the mock server in tests.
+                // In tests: base_url is `http://127.0.0.1:PORT`.
+                // We want `http://127.0.0.1:PORT/upload/storage/v1...`
+                // But `download` uses `http://127.0.0.1:PORT/b/...` (which implies base_url was root-ish or included /storage/v1?)
+                // In `FirebaseStorage::new`, base_url is `https://storage.googleapis.com/storage/v1`.
+                // So `download` appends `/b/...` resulting in `.../storage/v1/b/...`.
+                // If I set mock url as base_url, say `http://host:port`, `download` does `http://host:port/b/...`.
+                // So for upload, I should probably target `http://host:port/upload/storage/v1/b/...`?
+                // Let's try prepending `/upload` to the path relative to the server root, but `base_url` might have a path.
 
-                 // If base_url ends in `/storage/v1` (standard or emulated), switch to `/upload/storage/v1`.
-                 if self.base_url.ends_with("/storage/v1") {
-                     let upload_base = self.base_url.replace("/storage/v1", "/upload/storage/v1");
-                     format!("{}/b/{}/o", upload_base, self.bucket_name)
-                 } else {
-                     // If strictly just a host, maybe we are mocking specific paths.
-                     // Let's just fallback to standard behavior if we can't deduce.
-                     // But for tests we need it to work.
-                     // Let's assume for tests we want to hit `/upload/storage/v1` on the mock server if base_url is root.
-                     // If base_url is `http://localhost:1234`, we want `http://localhost:1234/upload/storage/v1/b/...`?
-                     format!("{}/upload/storage/v1/b/{}/o", self.base_url, self.bucket_name)
-                 }
+                // If base_url ends in `/storage/v1` (standard or emulated), switch to `/upload/storage/v1`.
+                if self.base_url.ends_with("/storage/v1") {
+                    let upload_base = self.base_url.replace("/storage/v1", "/upload/storage/v1");
+                    format!("{}/b/{}/o", upload_base, self.bucket_name)
+                } else {
+                    // If strictly just a host, maybe we are mocking specific paths.
+                    // Let's just fallback to standard behavior if we can't deduce.
+                    // But for tests we need it to work.
+                    // Let's assume for tests we want to hit `/upload/storage/v1` on the mock server if base_url is root.
+                    // If base_url is `http://localhost:1234`, we want `http://localhost:1234/upload/storage/v1/b/...`?
+                    format!(
+                        "{}/upload/storage/v1/b/{}/o",
+                        self.base_url, self.bucket_name
+                    )
+                }
             }
         };
 
         let mut url_obj = Url::parse(&url).map_err(|e| StorageError::ApiError(e.to_string()))?;
-        url_obj.query_pairs_mut()
+        url_obj
+            .query_pairs_mut()
             .append_pair("uploadType", "media")
             .append_pair("name", &self.name);
 
@@ -168,7 +325,8 @@ impl File {
     pub async fn download(&self) -> Result<bytes::Bytes, StorageError> {
         // Download endpoint: https://storage.googleapis.com/storage/v1/b/[BUCKET_NAME]/o/[OBJECT_NAME]?alt=media
         // Object name must be URL-encoded.
-        let encoded_name = url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
+        let encoded_name =
+            url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
         let url = format!(
             "{}/b/{}/o/{}",
             self.base_url, self.bucket_name, encoded_name
@@ -177,11 +335,7 @@ impl File {
         let mut url_obj = Url::parse(&url).map_err(|e| StorageError::ApiError(e.to_string()))?;
         url_obj.query_pairs_mut().append_pair("alt", "media");
 
-        let response = self
-            .client
-            .get(url_obj)
-            .send()
-            .await?;
+        let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -197,7 +351,8 @@ impl File {
 
     /// Deletes the file.
     pub async fn delete(&self) -> Result<(), StorageError> {
-        let encoded_name = url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
+        let encoded_name =
+            url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
         let url = format!(
             "{}/b/{}/o/{}",
             self.base_url, self.bucket_name, encoded_name
@@ -219,7 +374,8 @@ impl File {
 
     /// Gets the file's metadata.
     pub async fn get_metadata(&self) -> Result<ObjectMetadata, StorageError> {
-        let encoded_name = url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
+        let encoded_name =
+            url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
         let url = format!(
             "{}/b/{}/o/{}",
             self.base_url, self.bucket_name, encoded_name
