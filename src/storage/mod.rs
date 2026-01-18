@@ -57,6 +57,7 @@ pub struct FirebaseStorage {
     client: ClientWithMiddleware,
     pub base_url: String,
     pub project_id: String,
+    middleware: AuthMiddleware,
 }
 
 impl FirebaseStorage {
@@ -78,6 +79,7 @@ impl FirebaseStorage {
             client,
             base_url,
             project_id,
+            middleware,
         }
     }
 
@@ -94,6 +96,9 @@ impl FirebaseStorage {
             None => format!("{}.appspot.com", self.project_id),
         };
 
-        Bucket::new(self.client.clone(), self.base_url.clone(), bucket_name)
+        Bucket::new(self.client.clone(), self.base_url.clone(), bucket_name, self.middleware.clone())
     }
 }
+
+#[cfg(test)]
+mod tests;
