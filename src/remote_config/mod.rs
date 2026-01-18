@@ -15,6 +15,7 @@ use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
+use url::Url;
 
 /// Client for interacting with Firebase Remote Config.
 pub struct FirebaseRemoteConfig {
@@ -131,7 +132,7 @@ impl FirebaseRemoteConfig {
 
     /// Publishes a new Remote Config template.
     ///
-    /// This method includes the `If-Match` header using the ETag present in the `config` object.
+    /// This method includes the `If-Match` header using the ETag present in the `config` object.  
     /// If the ETag does not match the server's current version, the request will fail.
     ///
     /// # Arguments
@@ -160,10 +161,25 @@ impl FirebaseRemoteConfig {
         options: Option<models::ListVersionsOptions>,
     ) -> Result<models::ListVersionsResult, Error> {
         let url = format!("{}/versions", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| Error::Api {
+            code: 0,
+            message: e.to_string(),
+            status: "INTERNAL".to_string()
+        })?;
+
+        if let Some(opts) = options {
+            let mut query_pairs = url_obj.query_pairs_mut();
+            if let Some(size) = opts.page_size {
+                query_pairs.append_pair("pageSize", &size.to_string());
+            }
+            if let Some(token) = opts.page_token {
+                query_pairs.append_pair("pageToken", &token);
+            }
+        }
+
         let response = self
             .client
-            .get(url)
-            .query(&options.unwrap_or_default())
+            .get(url_obj)
             .send()
             .await?;
         self.process_response(response).await

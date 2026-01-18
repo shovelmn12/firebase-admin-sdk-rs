@@ -10,6 +10,7 @@ use crate::core::middleware::AuthMiddleware;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+use url::Url;
 
 const IDENTITY_TOOLKIT_URL: &str = "https://identitytoolkit.googleapis.com/v2";
 
@@ -41,11 +42,12 @@ impl ProjectConfig {
         request: CreateOidcProviderConfigRequest,
     ) -> Result<OidcProviderConfig, AuthError> {
         let url = format!("{}/oauthIdpConfigs", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("oauthIdpConfigId", &request.oauth_idp_config_id);
 
         let response = self
             .client
-            .post(&url)
-            .query(&[("oauthIdpConfigId", &request.oauth_idp_config_id)])
+            .post(url_obj)
             .json(&request)
             .send()
             .await?;
@@ -101,10 +103,12 @@ impl ProjectConfig {
 
         let update_mask = mask_parts.join(",");
 
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("updateMask", &update_mask);
+
         let response = self
             .client
-            .patch(&url)
-            .query(&[("updateMask", update_mask)])
+            .patch(url_obj)
             .json(&request)
             .send()
             .await?;
@@ -145,16 +149,19 @@ impl ProjectConfig {
         page_token: Option<&str>,
     ) -> Result<ListOidcProviderConfigsResponse, AuthError> {
         let url = format!("{}/oauthIdpConfigs", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
 
-        let mut params = Vec::new();
-        if let Some(max) = max_results {
-            params.push(("pageSize", max.to_string()));
-        }
-        if let Some(token) = page_token {
-            params.push(("pageToken", token.to_string()));
+        {
+            let mut query_pairs = url_obj.query_pairs_mut();
+            if let Some(max) = max_results {
+                query_pairs.append_pair("pageSize", &max.to_string());
+            }
+            if let Some(token) = page_token {
+                query_pairs.append_pair("pageToken", token);
+            }
         }
 
-        let response = self.client.get(&url).query(&params).send().await?;
+        let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -176,11 +183,12 @@ impl ProjectConfig {
         request: CreateSamlProviderConfigRequest,
     ) -> Result<SamlProviderConfig, AuthError> {
         let url = format!("{}/inboundSamlConfigs", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("inboundSamlConfigId", &request.inbound_saml_config_id);
 
         let response = self
             .client
-            .post(&url)
-            .query(&[("inboundSamlConfigId", &request.inbound_saml_config_id)])
+            .post(url_obj)
             .json(&request)
             .send()
             .await?;
@@ -231,9 +239,6 @@ impl ProjectConfig {
         if request.enabled.is_some() { mask_parts.push("enabled"); }
 
         // Nested fields need to be handled carefully for mask
-        // If we update ANY part of idpConfig, we might need to send the whole object or check mask support for deep fields.
-        // Google APIs usually support dot notation in mask: "idpConfig.idpEntityId"
-
         if let Some(idp) = &request.idp_config {
             if idp.idp_entity_id.is_some() { mask_parts.push("idpConfig.idpEntityId"); }
             if idp.sso_url.is_some() { mask_parts.push("idpConfig.ssoUrl"); }
@@ -248,10 +253,12 @@ impl ProjectConfig {
 
         let update_mask = mask_parts.join(",");
 
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
+        url_obj.query_pairs_mut().append_pair("updateMask", &update_mask);
+
         let response = self
             .client
-            .patch(&url)
-            .query(&[("updateMask", update_mask)])
+            .patch(url_obj)
             .json(&request)
             .send()
             .await?;
@@ -292,16 +299,19 @@ impl ProjectConfig {
         page_token: Option<&str>,
     ) -> Result<ListSamlProviderConfigsResponse, AuthError> {
         let url = format!("{}/inboundSamlConfigs", self.base_url);
+        let mut url_obj = Url::parse(&url).map_err(|e| AuthError::ApiError(e.to_string()))?;
 
-        let mut params = Vec::new();
-        if let Some(max) = max_results {
-            params.push(("pageSize", max.to_string()));
-        }
-        if let Some(token) = page_token {
-            params.push(("pageToken", token.to_string()));
+        {
+            let mut query_pairs = url_obj.query_pairs_mut();
+            if let Some(max) = max_results {
+                query_pairs.append_pair("pageSize", &max.to_string());
+            }
+            if let Some(token) = page_token {
+                query_pairs.append_pair("pageToken", token);
+            }
         }
 
-        let response = self.client.get(&url).query(&params).send().await?;
+        let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
