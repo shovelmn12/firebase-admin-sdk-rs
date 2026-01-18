@@ -4,7 +4,7 @@ A Rust implementation of the Firebase Admin SDK. This library allows you to inte
 
 ## Features
 
--   **Authentication**: User management (create, update, delete, list, get), ID token verification, custom token creation, and multi-tenancy support.
+-   **Authentication**: User management (create, update, delete, list, get), ID token verification, custom token creation, multi-tenancy support, and OIDC/SAML provider configuration.
 -   **Cloud Messaging (FCM)**: Send messages (single, batch, multicast), manage topics, and support for all target types (token, topic, condition).
 -   **Remote Config**: Get the active template, publish new templates (with ETag optimistic concurrency), rollback to previous versions, and list versions.
 -   **Firestore**: Read and write documents, manage collections, perform atomic batch writes and transactions, and support real-time updates via the `listen()` API.
@@ -199,7 +199,7 @@ async fn delete_reports(app: &firebase_admin_sdk::FirebaseApp) {
 
 - [ ] **Realtime Database**: Implement support for reading and writing to the Firebase Realtime Database.
 - [ ] **Machine Learning**: Add support for Firebase ML Model management.
-- [ ] **Auth**: Add support for OIDC and SAML provider configuration.
+- [x] **Auth**: Add support for OIDC and SAML provider configuration.
 - [ ] **Storage**: Add support for setting and updating object metadata.
 - [ ] **General**: Improve error handling and add more comprehensive integration tests.
 
