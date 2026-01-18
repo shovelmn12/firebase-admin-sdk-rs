@@ -18,15 +18,16 @@ pub mod snapshot;
 pub mod transaction;
 pub mod batch;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 use self::batch::WriteBatch;
 use self::reference::{CollectionReference, DocumentReference};
 use self::transaction::Transaction;
 use crate::core::middleware::AuthMiddleware;
 use crate::firestore::models::{
-    BeginTransactionRequest, BeginTransactionResponse, RollbackRequest, TransactionOptions,
+    BeginTransactionRequest, BeginTransactionResponse, ListCollectionIdsRequest,
+    ListCollectionIdsResponse, RollbackRequest, TransactionOptions,
 };
 use reqwest::{header, Client};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -93,6 +94,11 @@ impl FirebaseFirestore {
         Self { client, base_url }
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String) -> Self {
+        Self { client, base_url }
+    }
+
     /// Gets a `CollectionReference` instance that refers to the collection at the specified path.
     ///
     /// # Arguments
@@ -103,6 +109,53 @@ impl FirebaseFirestore {
             client: &self.client,
             path: format!("{}/{}", self.base_url, collection_id),
         }
+    }
+
+    /// Lists the root collections of the database.
+    pub async fn list_collections(&self) -> Result<Vec<CollectionReference<'_>>, FirestoreError> {
+        let url = format!("{}:listCollectionIds", self.base_url);
+        let mut collections = Vec::new();
+        let mut next_page_token = None;
+
+        loop {
+            let request = ListCollectionIdsRequest {
+                page_size: Some(100),
+                page_token: next_page_token.take(),
+            };
+
+            let response = self
+                .client
+                .post(&url)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(serde_json::to_vec(&request)?)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let text = response.text().await.unwrap_or_default();
+                return Err(FirestoreError::ApiError(format!(
+                    "List collections failed {}: {}",
+                    status, text
+                )));
+            }
+
+            let result: ListCollectionIdsResponse = response.json().await?;
+            for id in result.collection_ids {
+                collections.push(self.collection(&id));
+            }
+
+            if let Some(token) = result.next_page_token {
+                if token.is_empty() {
+                    break;
+                }
+                next_page_token = Some(token);
+            } else {
+                break;
+            }
+        }
+
+        Ok(collections)
     }
 
     /// Gets a `DocumentReference` instance that refers to the document at the specified path.

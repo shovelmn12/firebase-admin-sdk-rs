@@ -740,3 +740,29 @@ pub struct Cursor {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<bool>,
 }
+
+// --- List Collections Models ---
+
+/// The request for `listCollectionIds`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListCollectionIdsRequest {
+    /// The maximum number of results to return.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<i32>,
+    /// A page token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_token: Option<String>,
+}
+
+/// The response for `listCollectionIds`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListCollectionIdsResponse {
+    /// The collection IDs.
+    #[serde(default)]
+    pub collection_ids: Vec<String>,
+    /// The next page token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_page_token: Option<String>,
+}
