@@ -8,7 +8,7 @@ A Rust implementation of the Firebase Admin SDK. This library allows you to inte
 -   **Cloud Messaging (FCM)**: Send messages (single, batch, multicast), manage topics, and support for all target types (token, topic, condition).
 -   **Remote Config**: Get the active template, publish new templates (with ETag optimistic concurrency), rollback to previous versions, and list versions.
 -   **Firestore**: Read and write documents using a `CollectionReference` and `DocumentReference` API similar to the official Node.js SDK. Supports real-time updates via the `listen()` API.
- -   **Storage**: Upload, download, and manage files in Google Cloud Storage buckets.
+ -   **Storage**: Upload, download, manage files, and generate V4 signed URLs in Google Cloud Storage buckets.
  -   **Crashlytics**: Programmatically remove crash reports for specific users (e.g., for privacy compliance).
 
 ## Installation
@@ -166,6 +166,18 @@ async fn upload_file(app: &firebase_admin_sdk::FirebaseApp) {
     match file.save(file_content, "text/plain").await {
         Ok(_) => println!("File uploaded"),
         Err(e) => eprintln!("Error: {}", e),
+    }
+
+    // Generate a V4 signed URL
+    let options = firebase_admin_sdk::storage::GetSignedUrlOptions {
+        method: firebase_admin_sdk::storage::SignedUrlMethod::GET,
+        expires: std::time::SystemTime::now() + std::time::Duration::from_secs(3600), // 1 hour
+        content_type: None,
+    };
+
+    match file.get_signed_url(options) {
+        Ok(url) => println!("Signed URL: {}", url),
+        Err(e) => eprintln!("Error generating signed URL: {}", e),
     }
 }
 ```
