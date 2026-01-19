@@ -1,6 +1,9 @@
 [package]
 name = "firebase-admin-sdk"
-version = "0.1.0"
+version = "0.2.0"
+description = "Firebase Admin SDK for Rust, enabling interaction with Firebase services (Auth, FCM, Firestore, Storage, etc.) from a Rust backend."
+repository = "https://github.com/shovelmn12/firebase-admin-sdk-rs"
+license = "MIT"
 edition = "2021"
 
 [dependencies]
