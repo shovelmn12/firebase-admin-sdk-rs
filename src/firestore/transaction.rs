@@ -4,6 +4,7 @@ use super::models::{
 };
 use super::reference::{convert_fields_to_serde_value, convert_serializable_to_fields};
 use super::FirestoreError;
+use crate::core::parse_error_response;
 use reqwest::header;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::de::DeserializeOwned;
@@ -15,16 +16,16 @@ use url::Url;
 ///
 /// Transactions provide a way to ensure that a set of reads and writes are executed atomically.
 #[derive(Clone)]
-pub struct Transaction<'a> {
-    client: &'a ClientWithMiddleware,
+pub struct Transaction {
+    client: ClientWithMiddleware,
     base_url: String,
     pub transaction_id: String,
     writes: Arc<Mutex<Vec<Write>>>,
 }
 
-impl<'a> Transaction<'a> {
+impl Transaction {
     pub(crate) fn new(
-        client: &'a ClientWithMiddleware,
+        client: ClientWithMiddleware,
         base_url: String,
         transaction_id: String,
     ) -> Self {
@@ -67,12 +68,7 @@ impl<'a> Transaction<'a> {
         }
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(FirestoreError::ApiError(format!(
-                "Get document in transaction failed {}: {}",
-                status, text
-            )));
+            return Err(FirestoreError::ApiError(parse_error_response(response, "Get document in transaction failed").await));
         }
 
         let doc: Document = response.json().await?;
@@ -216,12 +212,7 @@ impl<'a> Transaction<'a> {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(FirestoreError::ApiError(format!(
-                "Commit transaction failed {}: {}",
-                status, text
-            )));
+            return Err(FirestoreError::ApiError(parse_error_response(response, "Commit transaction failed").await));
         }
 
         let result: CommitResponse = response.json().await?;

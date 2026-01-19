@@ -201,7 +201,7 @@ async fn delete_reports(app: &firebase_admin_sdk::FirebaseApp) {
 - [ ] **Machine Learning**: Add support for Firebase ML Model management.
 - [x] **Auth**: Add support for OIDC and SAML provider configuration.
 - [x] **Storage**: Add support for setting and updating object metadata.
-- [ ] **General**: Improve error handling and add more comprehensive integration tests.
+- [x] **General**: Improve error handling and add more comprehensive integration tests.
 
 ## Architecture and Patterns
 

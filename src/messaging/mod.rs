@@ -29,11 +29,15 @@ use reqwest::{Client, header};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use crate::core::middleware::AuthMiddleware;
+use crate::core::parse_error_response;
 use crate::messaging::models::{Message, MulticastMessage, TopicManagementResponse, TopicManagementError, BatchResponse, SendResponse, SendResponseInternal};
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
 
 pub mod models;
+
+#[cfg(test)]
+mod tests;
 
 /// Errors that can occur during Messaging operations.
 #[derive(Error, Debug)]
@@ -60,10 +64,12 @@ pub enum MessagingError {
 pub struct FirebaseMessaging {
     client: ClientWithMiddleware,
     project_id: String,
+    base_url: String,
 }
 
 // Wrapper for the request body required by FCM v1 API
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SendRequest<'a> {
     validate_only: bool,
     message: &'a Message,
@@ -98,11 +104,24 @@ impl FirebaseMessaging {
             .build();
 
         let project_id = middleware.key.project_id.clone().unwrap_or_default();
+        let base_url = format!("https://fcm.googleapis.com/v1/projects/{}/messages:send", project_id);
 
         Self {
             client,
             project_id,
+            base_url,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_url(middleware: AuthMiddleware, base_url: String) -> Self {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        let client = ClientBuilder::new(Client::new())
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .with(middleware.clone())
+            .build();
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
+        Self { client, project_id, base_url }
     }
 
     /// Sends a message to a specific target (token, topic, or condition).
@@ -138,24 +157,20 @@ impl FirebaseMessaging {
 
     /// Internal method to send the HTTP request.
     async fn send_request(&self, message: &Message, dry_run: bool) -> Result<String, MessagingError> {
-        let url = format!("https://fcm.googleapis.com/v1/projects/{}/messages:send", self.project_id);
-
         let request = SendRequest {
             validate_only: dry_run,
             message,
         };
 
         let response = self.client
-            .post(&url)
+            .post(&self.base_url)
             .header(header::CONTENT_TYPE, "application/json")
             .body(serde_json::to_vec(&request)?)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(MessagingError::ApiError(format!("FCM send failed {}: {}", status, text)));
+            return Err(MessagingError::ApiError(parse_error_response(response, "FCM send failed").await));
         }
 
         let result: SendResponseInternal = response.json().await?;
@@ -201,9 +216,7 @@ impl FirebaseMessaging {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(MessagingError::ApiError(format!("FCM batch send failed {}: {}", status, text)));
+            return Err(MessagingError::ApiError(parse_error_response(response, "FCM batch send failed").await));
         }
 
         let multipart_boundary = response
@@ -388,9 +401,7 @@ impl FirebaseMessaging {
                 .await?;
 
             if !response.status().is_success() {
-                let status = response.status();
-                let text = response.text().await.unwrap_or_default();
-                return Err(MessagingError::ApiError(format!("Topic management failed {}: {}", status, text)));
+                return Err(MessagingError::ApiError(parse_error_response(response, "Topic management failed").await));
             }
 
             let api_response: TopicManagementApiResponse = response.json().await?;

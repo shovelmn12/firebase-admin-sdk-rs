@@ -184,3 +184,45 @@ async fn test_create_saml_provider_config() {
     
     mock.assert();
 }
+
+#[tokio::test]
+async fn test_auth_error_parsing() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let auth = FirebaseAuth::new_with_client(client, server.url("/v1/projects/test-project"));
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/accounts");
+        then.status(400)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "error": {
+                    "code": 400,
+                    "message": "EMAIL_EXISTS",
+                    "errors": [
+                        {
+                            "message": "EMAIL_EXISTS",
+                            "domain": "global",
+                            "reason": "invalid"
+                        }
+                    ]
+                }
+            }));
+    });
+
+    let request = crate::auth::models::CreateUserRequest {
+        email: Some("exists@example.com".to_string()),
+        ..Default::default()
+    };
+
+    let result = auth.create_user(request).await;
+    assert!(result.is_err());
+    if let Err(AuthError::ApiError(msg)) = result {
+        assert_eq!(msg, "EMAIL_EXISTS (code: 400)");
+    } else {
+        panic!("Expected ApiError");
+    }
+    
+    mock.assert();
+}
