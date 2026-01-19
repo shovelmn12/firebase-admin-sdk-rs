@@ -1,10 +1,12 @@
 use super::*;
 use crate::core::middleware::AuthMiddleware;
-use crate::storage::file::{GetSignedUrlOptions, SignedUrlMethod};
+use crate::storage::file::{GetSignedUrlOptions, SignedUrlMethod, ObjectMetadata};
 use yup_oauth2::ServiceAccountKey;
 use std::time::{SystemTime, Duration};
 use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
+use httpmock::prelude::*;
+use serde_json::json;
 
 const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDhKEj4y/U48B/5
@@ -49,6 +51,57 @@ fn create_dummy_middleware() -> AuthMiddleware {
         client_x509_cert_url: None,
     };
     AuthMiddleware::new(key)
+}
+
+#[tokio::test]
+async fn test_set_metadata() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let middleware = create_dummy_middleware();
+    
+    // We point to the mock server, but FirebaseStorage expects base_url to be e.g. "https://storage.googleapis.com/storage/v1"
+    // Our mock server URL is like "http://127.0.0.1:xxx".
+    // File::set_metadata constructs URL as "{base_url}/b/{bucket}/o/{name}"
+    // So if we set base_url to server.url(""), we get "{server_url}/b/..."
+    
+    let storage = FirebaseStorage::new_with_client(client, server.url(""), middleware);
+    let bucket = storage.bucket(Some("test-bucket"));
+    let file = bucket.file("test-file.txt");
+
+    let metadata_update = ObjectMetadata {
+        content_type: Some("application/json".to_string()),
+        metadata: Some(std::collections::HashMap::from([("custom".to_string(), "value".to_string())])),
+        ..Default::default()
+    };
+
+    let mock = server.mock(|when, then| {
+        when.method(PATCH)
+            .path("/b/test-bucket/o/test-file.txt")
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "contentType": "application/json",
+                "metadata": {
+                    "custom": "value"
+                }
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "test-file.txt",
+                "bucket": "test-bucket",
+                "contentType": "application/json",
+                "metadata": {
+                    "custom": "value"
+                }
+            }));
+    });
+
+    let updated_metadata = file.set_metadata(&metadata_update).await.unwrap();
+    
+    assert_eq!(updated_metadata.content_type.unwrap(), "application/json");
+    assert_eq!(updated_metadata.metadata.unwrap().get("custom").unwrap(), "value");
+    
+    mock.assert();
 }
 
 #[test]
