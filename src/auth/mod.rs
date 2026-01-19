@@ -21,6 +21,7 @@ use crate::auth::verifier::{FirebaseTokenClaims, IdTokenVerifier, TokenVerificat
 use crate::auth::tenant_mgt::TenantAwareness;
 use crate::auth::project_config_impl::ProjectConfig;
 use crate::core::middleware::AuthMiddleware;
+use crate::core::parse_error_response;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::header;
 use reqwest::Client;
@@ -203,12 +204,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Create session cookie failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Create session cookie failed").await));
         }
 
         let result: CreateSessionCookieResponse = response.json().await?;
@@ -313,12 +309,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Generate email link failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Generate email link failed").await));
         }
 
         let result: EmailLinkResponse = response.json().await?;
@@ -375,12 +366,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Import users failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Import users failed").await));
         }
 
         let result: ImportUsersResponse = response.json().await?;
@@ -420,12 +406,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Create user failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Create user failed").await));
         }
 
         let user: UserRecord = response.json().await?;
@@ -445,12 +426,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Update user failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Update user failed").await));
         }
 
         let user: UserRecord = response.json().await?;
@@ -473,12 +449,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Delete user failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Delete user failed").await));
         }
 
         Ok(())
@@ -500,12 +471,7 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "Get user failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "Get user failed").await));
         }
 
         let result: GetAccountInfoResponse = response.json().await?;
@@ -571,12 +537,7 @@ impl FirebaseAuth {
         let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(AuthError::ApiError(format!(
-                "List users failed {}: {}",
-                status, text
-            )));
+            return Err(AuthError::ApiError(parse_error_response(response, "List users failed").await));
         }
 
         let result: ListUsersResponse = response.json().await?;
