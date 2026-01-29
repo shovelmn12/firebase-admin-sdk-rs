@@ -65,7 +65,12 @@ async fn test_send_message() {
     };
     let middleware = AuthMiddleware::new(key);
     
-    let messaging = FirebaseMessaging::new_with_url(middleware, server.url("/v1/projects/test-project/messages:send"));
+    let messaging = FirebaseMessaging::new_with_url(
+        middleware, 
+        server.url("/v1/projects/test-project/messages:send"),
+        server.url("/batch"),
+        server.url("/iid")
+    );
 
     let mock = server.mock(|when, then| {
         when.method(POST)
@@ -89,6 +94,130 @@ async fn test_send_message() {
 
     let result = messaging.send(&message, false).await.unwrap();
     assert_eq!(result, "projects/test-project/messages/12345");
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_subscribe_to_topic() {
+    let server = MockServer::start();
+    
+    // 1. Mock OAuth2 Token
+    let _token_mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "access_token": "fake-token",
+                "token_type": "Bearer",
+                "expires_in": 3600
+            }));
+    });
+
+    let key = ServiceAccountKey {
+        key_type: Some("service_account".to_string()),
+        project_id: Some("test-project".to_string()),
+        private_key: PRIVATE_KEY.to_string(),
+        client_email: "test@example.com".to_string(),
+        token_uri: server.url("/token"),
+        private_key_id: None,
+        client_id: None,
+        auth_uri: None,
+        auth_provider_x509_cert_url: None,
+        client_x509_cert_url: None,
+    };
+    let middleware = AuthMiddleware::new(key);
+    
+    let messaging = FirebaseMessaging::new_with_url(
+        middleware,
+        server.url("/v1/projects/test-project/messages:send"),
+        server.url("/batch"),
+        server.url("/iid"),
+    );
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/iid/iid/v1:batchAdd")
+            .json_body(json!({
+                "to": "/topics/test-topic",
+                "registration_tokens": ["token1", "token2"]
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "results": [
+                    {},
+                    { "error": "INVALID_ARGUMENT" }
+                ]
+            }));
+    });
+
+    let result = messaging.subscribe_to_topic(&["token1", "token2"], "test-topic").await.unwrap();
+    assert_eq!(result.success_count, 1);
+    assert_eq!(result.failure_count, 1);
+    assert_eq!(result.errors[0].reason, "INVALID_ARGUMENT");
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_unsubscribe_from_topic() {
+    let server = MockServer::start();
+    
+    // 1. Mock OAuth2 Token
+    let _token_mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/token");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "access_token": "fake-token",
+                "token_type": "Bearer",
+                "expires_in": 3600
+            }));
+    });
+
+    let key = ServiceAccountKey {
+        key_type: Some("service_account".to_string()),
+        project_id: Some("test-project".to_string()),
+        private_key: PRIVATE_KEY.to_string(),
+        client_email: "test@example.com".to_string(),
+        token_uri: server.url("/token"),
+        private_key_id: None,
+        client_id: None,
+        auth_uri: None,
+        auth_provider_x509_cert_url: None,
+        client_x509_cert_url: None,
+    };
+    let middleware = AuthMiddleware::new(key);
+    
+    let messaging = FirebaseMessaging::new_with_url(
+        middleware,
+        server.url("/v1/projects/test-project/messages:send"),
+        server.url("/batch"),
+        server.url("/iid"),
+    );
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/iid/iid/v1:batchRemove")
+            .json_body(json!({
+                "to": "/topics/test-topic",
+                "registration_tokens": ["token1"]
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "results": [
+                    {}
+                ]
+            }));
+    });
+
+    let result = messaging.unsubscribe_from_topic(&["token1"], "test-topic").await.unwrap();
+    assert_eq!(result.success_count, 1);
+    assert_eq!(result.failure_count, 0);
     
     mock.assert();
 }

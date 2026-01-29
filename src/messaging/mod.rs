@@ -65,6 +65,8 @@ pub struct FirebaseMessaging {
     client: ClientWithMiddleware,
     project_id: String,
     base_url: String,
+    batch_url: String,
+    iid_base_url: String,
 }
 
 // Wrapper for the request body required by FCM v1 API
@@ -105,23 +107,27 @@ impl FirebaseMessaging {
 
         let project_id = middleware.key.project_id.clone().unwrap_or_default();
         let base_url = format!("https://fcm.googleapis.com/v1/projects/{}/messages:send", project_id);
+        let batch_url = "https://fcm.googleapis.com/batch".to_string();
+        let iid_base_url = "https://iid.googleapis.com".to_string();
 
         Self {
             client,
             project_id,
             base_url,
+            batch_url,
+            iid_base_url,
         }
     }
 
     #[cfg(test)]
-    pub(crate) fn new_with_url(middleware: AuthMiddleware, base_url: String) -> Self {
+    pub(crate) fn new_with_url(middleware: AuthMiddleware, base_url: String, batch_url: String, iid_base_url: String) -> Self {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
         let client = ClientBuilder::new(Client::new())
             .with(RetryTransientMiddleware::new_with_policy(retry_policy))
             .with(middleware.clone())
             .build();
         let project_id = middleware.key.project_id.clone().unwrap_or_default();
-        Self { client, project_id, base_url }
+        Self { client, project_id, base_url, batch_url, iid_base_url }
     }
 
     /// Sends a message to a specific target (token, topic, or condition).
@@ -201,7 +207,7 @@ impl FirebaseMessaging {
             return Err(MessagingError::ApiError("Cannot send more than 500 messages in a single batch.".to_string()));
         }
 
-        let url = format!("https://fcm.googleapis.com/batch");
+        let url = self.batch_url.clone();
         let boundary = format!("batch_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
 
         let body = self.build_multipart_body(messages, dry_run, &boundary)?;
@@ -377,9 +383,9 @@ impl FirebaseMessaging {
         };
 
         let url = if subscribe {
-            "https://iid.googleapis.com/iid/v1:batchAdd"
+            format!("{}/iid/v1:batchAdd", self.iid_base_url)
         } else {
-            "https://iid.googleapis.com/iid/v1:batchRemove"
+            format!("{}/iid/v1:batchRemove", self.iid_base_url)
         };
 
         let mut response_summary = TopicManagementResponse::default();
@@ -391,7 +397,7 @@ impl FirebaseMessaging {
             };
 
             let response = self.client
-                .post(url)
+                .post(&url)
                 .header(header::CONTENT_TYPE, "application/json")
                 // Use access_token_header from AuthMiddleware, but the IID API also requires the standard header.
                 // The AuthMiddleware adds it automatically.

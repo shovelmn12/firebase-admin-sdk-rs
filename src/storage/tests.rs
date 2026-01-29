@@ -129,3 +129,108 @@ fn test_get_signed_url() {
     // test@test-project.iam.gserviceaccount.com/YYYYMMDD/auto/storage/goog4_request
     assert!(url.contains("test%40test-project.iam.gserviceaccount.com"));
 }
+
+#[tokio::test]
+async fn test_save_file() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let middleware = create_dummy_middleware();
+    // Using default base_url-like behavior but pointing to mock server
+    let storage = FirebaseStorage::new_with_client(client, server.url(""), middleware);
+    let bucket = storage.bucket(Some("test-bucket"));
+    let file = bucket.file("test-file.txt");
+
+    let content = "Hello, World!";
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/upload/storage/v1/b/test-bucket/o")
+            .query_param("uploadType", "media")
+            .query_param("name", "test-file.txt")
+            .header("content-type", "text/plain")
+            .body(content);
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "test-file.txt",
+                "bucket": "test-bucket"
+            }));
+    });
+
+    file.save(content, "text/plain").await.unwrap();
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_download_file() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let middleware = create_dummy_middleware();
+    let storage = FirebaseStorage::new_with_client(client, server.url(""), middleware);
+    let bucket = storage.bucket(Some("test-bucket"));
+    let file = bucket.file("test-file.txt");
+
+    let content = "Hello, World!";
+
+    let mock = server.mock(|when, then| {
+        when.method(GET)
+            .path("/b/test-bucket/o/test-file.txt")
+            .query_param("alt", "media");
+        then.status(200)
+            .body(content);
+    });
+
+    let bytes = file.download().await.unwrap();
+    assert_eq!(bytes, content.as_bytes());
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_delete_file() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let middleware = create_dummy_middleware();
+    let storage = FirebaseStorage::new_with_client(client, server.url(""), middleware);
+    let bucket = storage.bucket(Some("test-bucket"));
+    let file = bucket.file("test-file.txt");
+
+    let mock = server.mock(|when, then| {
+        when.method(DELETE)
+            .path("/b/test-bucket/o/test-file.txt");
+        then.status(204);
+    });
+
+    file.delete().await.unwrap();
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_get_metadata() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let middleware = create_dummy_middleware();
+    let storage = FirebaseStorage::new_with_client(client, server.url(""), middleware);
+    let bucket = storage.bucket(Some("test-bucket"));
+    let file = bucket.file("test-file.txt");
+
+    let mock = server.mock(|when, then| {
+        when.method(GET)
+            .path("/b/test-bucket/o/test-file.txt");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "test-file.txt",
+                "bucket": "test-bucket",
+                "size": "100"
+            }));
+    });
+
+    let metadata = file.get_metadata().await.unwrap();
+    assert_eq!(metadata.name.unwrap(), "test-file.txt");
+    assert_eq!(metadata.size.unwrap(), "100");
+    
+    mock.assert();
+}

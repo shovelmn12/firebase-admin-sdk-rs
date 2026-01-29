@@ -226,3 +226,181 @@ async fn test_auth_error_parsing() {
     
     mock.assert();
 }
+
+#[tokio::test]
+async fn test_create_user_success() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let auth = FirebaseAuth::new_with_client(client, server.url("/v1/projects/test-project"));
+
+    let request = crate::auth::models::CreateUserRequest {
+        email: Some("newuser@example.com".to_string()),
+        password: Some("password123".to_string()),
+        display_name: Some("New User".to_string()),
+        ..Default::default()
+    };
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/accounts")
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "email": "newuser@example.com",
+                "password": "password123",
+                "displayName": "New User"
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "localId": "new-uid",
+                "email": "newuser@example.com",
+                "displayName": "New User",
+                "emailVerified": false,
+                "disabled": false
+            }));
+    });
+
+    let user = auth.create_user(request).await.unwrap();
+    assert_eq!(user.local_id, "new-uid");
+    assert_eq!(user.email.unwrap(), "newuser@example.com");
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_update_user_success() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let auth = FirebaseAuth::new_with_client(client, server.url("/v1/projects/test-project"));
+
+    let request = crate::auth::models::UpdateUserRequest {
+        local_id: "user-uid".to_string(),
+        display_name: Some("Updated Name".to_string()),
+        ..Default::default()
+    };
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/accounts:update")
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "localId": "user-uid",
+                "displayName": "Updated Name"
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "localId": "user-uid",
+                "displayName": "Updated Name",
+                "emailVerified": false,
+                "disabled": false
+            }));
+    });
+
+    let user = auth.update_user(request).await.unwrap();
+    assert_eq!(user.local_id, "user-uid");
+    assert_eq!(user.display_name.unwrap(), "Updated Name");
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_delete_user_success() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let auth = FirebaseAuth::new_with_client(client, server.url("/v1/projects/test-project"));
+
+    let uid = "user-uid";
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/accounts:delete")
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "localId": uid
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({}));
+    });
+
+    auth.delete_user(uid).await.unwrap();
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_get_user_by_email() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let auth = FirebaseAuth::new_with_client(client, server.url("/v1/projects/test-project"));
+
+    let email = "test@example.com";
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/accounts:lookup")
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "email": [email]
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "users": [
+                    {
+                        "localId": "test-uid",
+                        "email": email,
+                        "emailVerified": true,
+                        "disabled": false
+                    }
+                ]
+            }));
+    });
+
+    let user = auth.get_user_by_email(email).await.unwrap();
+    assert_eq!(user.local_id, "test-uid");
+    assert_eq!(user.email.unwrap(), email);
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_list_users() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let auth = FirebaseAuth::new_with_client(client, server.url("/v1/projects/test-project"));
+
+    let mock = server.mock(|when, then| {
+        when.method(GET)
+            .path("/v1/projects/test-project/accounts")
+            .query_param("maxResults", "100");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "users": [
+                    {
+                        "localId": "user1",
+                        "email": "user1@example.com",
+                        "emailVerified": false,
+                        "disabled": false
+                    },
+                    {
+                        "localId": "user2",
+                        "email": "user2@example.com",
+                        "emailVerified": true,
+                        "disabled": false
+                    }
+                ],
+                "nextPageToken": "next-token"
+            }));
+    });
+
+    let result = auth.list_users(100, None).await.unwrap();
+    let users = result.users.unwrap();
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].local_id, "user1");
+    assert_eq!(result.next_page_token.unwrap(), "next-token");
+    
+    mock.assert();
+}
