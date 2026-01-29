@@ -3,6 +3,51 @@ use reqwest::Client;
 use reqwest_middleware::ClientBuilder;
 use httpmock::prelude::*;
 use serde_json::json;
+use crate::firestore::models::{FieldOperator, Direction};
+use crate::firestore::query::Query;
+
+#[tokio::test]
+async fn test_new_query_api() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let db = FirebaseFirestore::new_with_client(client, server.url("/v1/projects/test-project/databases/(default)/documents"));
+
+    let query = Query::new("users")
+        .where_filter("age", FieldOperator::GreaterThan, 18).unwrap()
+        .order_by("age", Direction::Ascending)
+        .limit(10);
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/databases/(default)/documents:runQuery")
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "parent": server.url("/v1/projects/test-project/databases/(default)/documents"),
+                "structuredQuery": {
+                    "from": [{"collectionId": "users"}],
+                    "where": {
+                        "fieldFilter": {
+                            "field": {"fieldPath": "age"},
+                            "op": "GREATER_THAN",
+                            "value": {"integerValue": "18"}
+                        }
+                    },
+                    "orderBy": [{
+                        "field": {"fieldPath": "age"},
+                        "direction": "ASCENDING"
+                    }],
+                    "limit": 10
+                }
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!([]));
+    });
+
+    let _ = db.query(query).get().await;
+    
+    mock.assert();
+}
 
 #[tokio::test]
 async fn test_list_root_collections() {

@@ -4,7 +4,7 @@ use super::models::{
     ListCollectionIdsRequest, ListCollectionIdsResponse, ListDocumentsResponse, MapValue,
     QueryTarget, StructuredQuery, Target, TargetType, Value, ValueType,
 };
-use super::query::Query;
+use super::query::{ExecutableQuery, Query};
 use super::snapshot::{DocumentSnapshot, WriteResult};
 use super::FirestoreError;
 use reqwest::header;
@@ -462,30 +462,30 @@ impl<'a> CollectionReference<'a> {
         field: &str,
         op: FieldOperator,
         value: T,
-    ) -> Result<Query<'a>, FirestoreError> {
+    ) -> Result<ExecutableQuery<'a>, FirestoreError> {
         self.query().where_filter(field, op, value)
     }
 
     /// Creates and returns a new `Query` that's additionally sorted by the specified field.
-    pub fn order_by(&self, field: &str, direction: super::models::Direction) -> Query<'a> {
+    pub fn order_by(&self, field: &str, direction: super::models::Direction) -> ExecutableQuery<'a> {
         self.query().order_by(field, direction)
     }
 
     /// Creates and returns a new `Query` that only returns the first matching documents.
-    pub fn limit(&self, limit: i32) -> Query<'a> {
+    pub fn limit(&self, limit: i32) -> ExecutableQuery<'a> {
         self.query().limit(limit)
     }
 
     /// Creates and returns a new `Query` that skips the first matching documents.
-    pub fn offset(&self, offset: i32) -> Query<'a> {
+    pub fn offset(&self, offset: i32) -> ExecutableQuery<'a> {
         self.query().offset(offset)
     }
 
-    fn query(&self) -> Query<'a> {
+    fn query(&self) -> ExecutableQuery<'a> {
         let (parent, collection_id) = extract_parent_and_collection(&self.path)
             .expect("Collection path should be valid");
 
-        Query::new(self.client, parent, collection_id)
+        ExecutableQuery::new(self.client, parent, Query::new(collection_id))
     }
 
     /// Listens to changes in the collection.

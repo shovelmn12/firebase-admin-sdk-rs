@@ -22,6 +22,7 @@ pub mod batch;
 mod tests;
 
 use self::batch::WriteBatch;
+use self::query::{ExecutableQuery, Query};
 use self::reference::{CollectionReference, DocumentReference};
 use self::transaction::Transaction;
 use crate::core::middleware::AuthMiddleware;
@@ -105,7 +106,7 @@ impl FirebaseFirestore {
     /// # Arguments
     ///
     /// * `collection_id` - The ID of the collection (e.g., "users").
-    pub fn collection<'a>(&'a self, collection_id: &str) -> CollectionReference<'a> {
+    pub fn collection(&'_ self, collection_id: &str) -> CollectionReference<'_> {
         CollectionReference {
             client: &self.client,
             path: format!("{}/{}", self.base_url, collection_id),
@@ -159,7 +160,7 @@ impl FirebaseFirestore {
     /// # Arguments
     ///
     /// * `document_path` - The slash-separated path to the document (e.g., "users/user1").
-    pub fn doc<'a>(&'a self, document_path: &str) -> DocumentReference<'a> {
+    pub fn doc(&self, document_path: &str) -> DocumentReference {
         DocumentReference {
             client: &self.client,
             path: format!("{}/{}", self.base_url, document_path),
@@ -169,6 +170,15 @@ impl FirebaseFirestore {
     /// Creates a write batch, used for performing multiple writes as a single atomic operation.
     pub fn batch(&self) -> WriteBatch<'_> {
         WriteBatch::new(&self.client, self.base_url.clone())
+    }
+
+    /// Creates an executable query from a query definition.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The `Query` definition containing filters and the target collection.
+    pub fn query(&self, query: Query) -> ExecutableQuery<'_> {
+        ExecutableQuery::new(&self.client, self.base_url.clone(), query)
     }
 
     /// Begins a new transaction.
