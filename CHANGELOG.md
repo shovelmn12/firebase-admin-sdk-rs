@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-01-29
+
+### Added
+- **Documentation**: Added "Experimental" warning to README.
+- **Testing**: Added comprehensive unit tests for Crashlytics, Remote Config, Auth, and Firestore modules.
+- **Docs**: Converted documentation examples to `no_run` to ensure they compile and stay up-to-date.
+
+## [0.2.1] - 2026-01-29
+
+### Changed
+- Bumped version to 0.2.1 to reflect experimental status update.
+
 ## [0.2.0] - 2026-01-18
 
 ### Added
