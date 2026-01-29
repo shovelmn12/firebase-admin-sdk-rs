@@ -1,5 +1,8 @@
 # Firebase Admin SDK for Rust
 
+> **Warning**
+> This library is currently in an **experimental** state. The API is subject to change, and features may be incomplete or unstable. **Use at your own risk** in production environments.
+
 A Rust implementation of the Firebase Admin SDK. This library allows you to interact with Firebase services such as Authentication, Cloud Messaging (FCM), Remote Config, and Firestore from your Rust backend.
 
 ## Features
