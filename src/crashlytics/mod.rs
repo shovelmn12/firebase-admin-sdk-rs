@@ -69,6 +69,13 @@ impl FirebaseCrashlytics {
         Self { client, base_url }
     }
 
+    /// Creates a new `FirebaseCrashlytics` client with a custom client and base URL.
+    /// Internal use only, primarily for testing.
+    #[allow(dead_code)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String) -> Self {
+        Self { client, base_url }
+    }
+
     /// Enqueues a request to permanently remove crash reports associated with the specified user.
     ///
     /// # Arguments
@@ -95,3 +102,6 @@ impl FirebaseCrashlytics {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

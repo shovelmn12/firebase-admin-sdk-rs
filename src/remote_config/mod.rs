@@ -80,6 +80,13 @@ impl FirebaseRemoteConfig {
         Self { client, base_url }
     }
 
+    /// Creates a new `FirebaseRemoteConfig` instance with a custom client and base URL.
+    /// Internal use only, primarily for testing.
+    #[allow(dead_code)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String) -> Self {
+        Self { client, base_url }
+    }
+
     async fn process_response<T: serde::de::DeserializeOwned>(
         &self,
         response: reqwest::Response,
@@ -202,3 +209,6 @@ impl FirebaseRemoteConfig {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod tests;
