@@ -25,6 +25,7 @@ use self::batch::WriteBatch;
 use self::reference::{CollectionReference, DocumentReference};
 use self::transaction::Transaction;
 use crate::core::middleware::AuthMiddleware;
+use crate::core::parse_error_response;
 use crate::firestore::models::{
     BeginTransactionRequest, BeginTransactionResponse, ListCollectionIdsRequest,
     ListCollectionIdsResponse, RollbackRequest, TransactionOptions,
@@ -132,12 +133,7 @@ impl FirebaseFirestore {
                 .await?;
 
             if !response.status().is_success() {
-                let status = response.status();
-                let text = response.text().await.unwrap_or_default();
-                return Err(FirestoreError::ApiError(format!(
-                    "List collections failed {}: {}",
-                    status, text
-                )));
+                return Err(FirestoreError::ApiError(parse_error_response(response, "List collections failed").await));
             }
 
             let result: ListCollectionIdsResponse = response.json().await?;
@@ -181,7 +177,7 @@ impl FirebaseFirestore {
     pub async fn begin_transaction(
         &self,
         options: Option<TransactionOptions>,
-    ) -> Result<Transaction<'_>, FirestoreError> {
+    ) -> Result<Transaction, FirestoreError> {
         let url = format!(
             "{}:beginTransaction",
             self.base_url.split("/documents").next().unwrap()
@@ -198,17 +194,12 @@ impl FirebaseFirestore {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(FirestoreError::ApiError(format!(
-                "Begin transaction failed {}: {}",
-                status, text
-            )));
+            return Err(FirestoreError::ApiError(parse_error_response(response, "Begin transaction failed").await));
         }
 
         let result: BeginTransactionResponse = response.json().await?;
         Ok(Transaction::new(
-            &self.client,
+            self.client.clone(),
             self.base_url.clone(),
             result.transaction,
         ))
@@ -234,12 +225,7 @@ impl FirebaseFirestore {
             .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(FirestoreError::ApiError(format!(
-                "Rollback transaction failed {}: {}",
-                status, text
-            )));
+            return Err(FirestoreError::ApiError(parse_error_response(response, "Rollback transaction failed").await));
         }
 
         Ok(())

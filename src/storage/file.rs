@@ -56,38 +56,55 @@ impl SignedUrlMethod {
 pub struct ObjectMetadata {
     // ... (fields remain same)
     /// The name of the object.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// The bucket containing the object.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bucket: Option<String>,
     /// The content generation of this object. Used for object versioning.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub generation: Option<String>,
     /// The version of the metadata for this object at this generation.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metageneration: Option<String>,
     /// Content-Type of the object data.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
     /// The creation time of the object.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub time_created: Option<String>,
     /// The modification time of the object metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub updated: Option<String>,
     /// Storage class of the object.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub storage_class: Option<String>,
     /// Content-Length of the data in bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<String>,
     /// MD5 hash of the data; encoded using base64.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub md5_hash: Option<String>,
     /// Media download link.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub media_link: Option<String>,
     /// Content-Encoding of the object data.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content_encoding: Option<String>,
     /// Content-Disposition of the object data.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content_disposition: Option<String>,
     /// Cache-Control directive for the object data.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_control: Option<String>,
     /// User-provided metadata, in key/value pairs.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<std::collections::HashMap<String, String>>,
     /// CRC32c checksum, as described in RFC 4960, Appendix B; encoded using base64.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub crc32c: Option<String>,
     /// HTTP 1.1 Entity tag for the object.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
 }
 
@@ -388,6 +405,42 @@ impl File {
             let text = response.text().await.unwrap_or_default();
             return Err(StorageError::ApiError(format!(
                 "Get metadata failed {}: {}",
+                status, text
+            )));
+        }
+
+        Ok(response.json().await?)
+    }
+
+    /// Sets the file's metadata.
+    ///
+    /// This method uses the PATCH method to update the file's metadata.
+    /// Only non-null fields in the provided `metadata` object will be updated.
+    ///
+    /// # Arguments
+    ///
+    /// * `metadata` - The metadata to set.
+    pub async fn set_metadata(&self, metadata: &ObjectMetadata) -> Result<ObjectMetadata, StorageError> {
+        let encoded_name =
+            url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
+        let url = format!(
+            "{}/b/{}/o/{}",
+            self.base_url, self.bucket_name, encoded_name
+        );
+
+        let response = self
+            .client
+            .patch(&url)
+            .header(header::CONTENT_TYPE, "application/json")
+            .json(metadata)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(StorageError::ApiError(format!(
+                "Set metadata failed {}: {}",
                 status, text
             )));
         }

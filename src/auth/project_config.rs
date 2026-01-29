@@ -49,11 +49,15 @@ pub struct CreateOidcProviderConfigRequest {
     #[serde(skip)]
     pub oauth_idp_config_id: String,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     pub client_id: String,
     pub issuer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub response_type: Option<OidcResponseType>,
 }
 
@@ -61,11 +65,17 @@ pub struct CreateOidcProviderConfigRequest {
 #[derive(Debug, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateOidcProviderConfigRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub response_type: Option<OidcResponseType>,
 }
 
@@ -82,16 +92,22 @@ pub struct ListOidcProviderConfigsResponse {
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SamlIdpConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub idp_entity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sso_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sign_request: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub idp_certificates: Option<Vec<SamlCertificate>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SamlSpConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sp_entity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub callback_uri: Option<String>,
 }
 
@@ -130,7 +146,9 @@ pub struct CreateSamlProviderConfigRequest {
     #[serde(skip)]
     pub inbound_saml_config_id: String,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     pub idp_config: SamlIdpConfig,
     pub sp_config: SamlSpConfig,
@@ -140,9 +158,13 @@ pub struct CreateSamlProviderConfigRequest {
 #[derive(Debug, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSamlProviderConfigRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub idp_config: Option<SamlIdpConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sp_config: Option<SamlSpConfig>,
 }
 

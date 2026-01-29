@@ -6,7 +6,7 @@
 //!
 //! # Examples
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! # use firebase_admin_sdk::FirebaseApp;
 //! # async fn run(app: FirebaseApp) {
 //! let storage = app.storage();
@@ -75,6 +75,17 @@ impl FirebaseStorage {
         let project_id = middleware.key.project_id.clone().unwrap_or_default();
         let base_url = STORAGE_V1_API.to_string();
 
+        Self {
+            client,
+            base_url,
+            project_id,
+            middleware,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String, middleware: AuthMiddleware) -> Self {
+        let project_id = middleware.key.project_id.clone().unwrap_or_default();
         Self {
             client,
             base_url,

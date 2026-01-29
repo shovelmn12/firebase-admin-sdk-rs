@@ -1,6 +1,9 @@
 [package]
 name = "firebase-admin-sdk"
-version = "0.1.0"
+version = "0.2.2"
+description = "Firebase Admin SDK for Rust, enabling interaction with Firebase services (Auth, FCM, Firestore, Storage, etc.) from a Rust backend."
+repository = "https://github.com/shovelmn12/firebase-admin-sdk-rs"
+license = "MIT"
 edition = "2021"
 
 [dependencies]
@@ -13,7 +16,6 @@ serde_json = "1.0.149"
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 yup-oauth2 = "12.1.2"
 thiserror = "2.0.18"
-url = "2.5.8"
 anyhow = "1.0.100"
 async-trait = "0.1.89"
 hyper-rustls = "0.27.7"
@@ -25,7 +27,7 @@ chrono = { version = "0.4.43", features = ["serde"] }
 rsa = "0.9.10"
 sha2 = "0.10.9"
 hex = "0.4.3"
-base64 = "0.22.1"
+url = "2.5.8"
 
 [dev-dependencies]
 httpmock = "0.8.2"

@@ -8,6 +8,8 @@
 //! If the remote configuration has changed since it was fetched, the publish operation will fail.
 
 pub mod models;
+#[cfg(test)]
+mod tests;
 
 use crate::core::middleware::AuthMiddleware;
 use crate::remote_config::models::RemoteConfig;
@@ -77,6 +79,13 @@ impl FirebaseRemoteConfig {
         let project_id = middleware.key.project_id.clone().unwrap_or_default();
         let base_url = REMOTE_CONFIG_V1_API.replace("{project_id}", &project_id);
 
+        Self { client, base_url }
+    }
+
+    /// Creates a new `FirebaseRemoteConfig` instance with a custom client and base URL.
+    /// Internal use only, primarily for testing.
+    #[allow(dead_code)]
+    pub(crate) fn new_with_client(client: ClientWithMiddleware, base_url: String) -> Self {
         Self { client, base_url }
     }
 
@@ -164,7 +173,7 @@ impl FirebaseRemoteConfig {
         let mut url_obj = Url::parse(&url).map_err(|e| Error::Api {
             code: 0,
             message: e.to_string(),
-            status: "INTERNAL".to_string()
+            status: "INTERNAL".to_string(),
         })?;
 
         if let Some(opts) = options {
@@ -177,11 +186,7 @@ impl FirebaseRemoteConfig {
             }
         }
 
-        let response = self
-            .client
-            .get(url_obj)
-            .send()
-            .await?;
+        let response = self.client.get(url_obj).send().await?;
         self.process_response(response).await
     }
 

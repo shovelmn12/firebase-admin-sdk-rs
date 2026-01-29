@@ -15,12 +15,21 @@ use std::sync::{Arc, Mutex};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
+/// # use firebase_admin_sdk::FirebaseApp;
+/// # use serde_json::json;
+/// # async fn run(app: FirebaseApp) -> Result<(), Box<dyn std::error::Error>> {
+/// # let firestore = app.firestore();
 /// let batch = firestore.batch();
+/// let user1 = json!({"name": "User 1"});
+/// let user2_updates = json!({"name": "User 2 Updated"});
+///
 /// batch.set("users/user1", &user1)?;
 /// batch.update("users/user2", &user2_updates)?;
 /// batch.delete("users/user3")?;
 /// batch.commit().await?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone)]
 pub struct WriteBatch<'a> {
