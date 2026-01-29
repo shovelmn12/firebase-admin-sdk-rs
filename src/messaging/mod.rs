@@ -5,7 +5,7 @@
 //!
 //! # Examples
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use firebase_admin_sdk::messaging::models::{Message, Notification};
 //! # use firebase_admin_sdk::FirebaseApp;
 //! # async fn run(app: FirebaseApp) {

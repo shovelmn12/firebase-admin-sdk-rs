@@ -17,7 +17,7 @@
 //! The entry point is the [`FirebaseApp`] struct. You initialize it with a `ServiceAccountKey`
 //! (typically loaded from a JSON file), and then access the various services.
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use firebase_admin_sdk::{FirebaseApp, yup_oauth2};
 //!
 //! async fn example() {
