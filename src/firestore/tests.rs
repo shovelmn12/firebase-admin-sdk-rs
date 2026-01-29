@@ -118,3 +118,163 @@ async fn test_run_transaction() {
     get_mock.assert();
     commit_mock.assert();
 }
+
+#[tokio::test]
+async fn test_get_document() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let db = FirebaseFirestore::new_with_client(client, server.url("/v1/projects/test-project/databases/(default)/documents"));
+
+    let mock = server.mock(|when, then| {
+        when.method(GET)
+            .path("/v1/projects/test-project/databases/(default)/documents/users/user1");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "projects/test-project/databases/(default)/documents/users/user1",
+                "fields": { "name": { "stringValue": "John Doe" } },
+                "createTime": "2023-01-01T00:00:00Z",
+                "updateTime": "2023-01-01T00:00:00Z"
+            }));
+    });
+
+    let doc = db.doc("users/user1").get().await.unwrap();
+    assert_eq!(doc.id, "user1");
+    let fields = doc.document.unwrap().fields;
+    if let Some(crate::firestore::models::ValueType::StringValue(s)) = fields.get("name").map(|v| &v.value_type) {
+        assert_eq!(s, "John Doe");
+    } else {
+        panic!("Field 'name' mismatch");
+    }
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_set_document() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let db = FirebaseFirestore::new_with_client(client, server.url("/v1/projects/test-project/databases/(default)/documents"));
+
+    let mock = server.mock(|when, then| {
+        when.method(PATCH)
+            .path("/v1/projects/test-project/databases/(default)/documents/users/user1")
+            .json_body(json!({
+                "fields": {
+                    "name": { "stringValue": "John Doe" }
+                }
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "projects/test-project/databases/(default)/documents/users/user1",
+                "fields": { "name": { "stringValue": "John Doe" } },
+                "createTime": "2023-01-01T00:00:00Z",
+                "updateTime": "2023-01-01T00:00:00Z"
+            }));
+    });
+
+    #[derive(serde::Serialize)]
+    struct User {
+        name: String,
+    }
+
+    let result = db.doc("users/user1").set(&User { name: "John Doe".to_string() }).await.unwrap();
+    assert!(!result.write_time.is_empty());
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_update_document() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let db = FirebaseFirestore::new_with_client(client, server.url("/v1/projects/test-project/databases/(default)/documents"));
+
+    let mock = server.mock(|when, then| {
+        when.method(PATCH)
+            .path("/v1/projects/test-project/databases/(default)/documents/users/user1")
+            .query_param("updateMask.fieldPaths", "name")
+            .json_body(json!({
+                "fields": {
+                    "name": { "stringValue": "Jane Doe" }
+                }
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "projects/test-project/databases/(default)/documents/users/user1",
+                "fields": { "name": { "stringValue": "Jane Doe" } },
+                "createTime": "2023-01-01T00:00:00Z",
+                "updateTime": "2023-01-02T00:00:00Z"
+            }));
+    });
+
+    #[derive(serde::Serialize)]
+    struct UserUpdate {
+        name: String,
+    }
+
+    let result = db.doc("users/user1")
+        .update(&UserUpdate { name: "Jane Doe".to_string() }, Some(vec!["name".to_string()]))
+        .await
+        .unwrap();
+    assert!(!result.write_time.is_empty());
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_delete_document() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let db = FirebaseFirestore::new_with_client(client, server.url("/v1/projects/test-project/databases/(default)/documents"));
+
+    let mock = server.mock(|when, then| {
+        when.method(DELETE)
+            .path("/v1/projects/test-project/databases/(default)/documents/users/user1");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({}));
+    });
+
+    let result = db.doc("users/user1").delete().await.unwrap();
+    assert!(!result.write_time.is_empty());
+    
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_collection_add() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let db = FirebaseFirestore::new_with_client(client, server.url("/v1/projects/test-project/databases/(default)/documents"));
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/databases/(default)/documents/users")
+            .json_body(json!({
+                "fields": {
+                    "name": { "stringValue": "New User" }
+                }
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(json!({
+                "name": "projects/test-project/databases/(default)/documents/users/auto-id",
+                "fields": { "name": { "stringValue": "New User" } },
+                "createTime": "2023-01-01T00:00:00Z",
+                "updateTime": "2023-01-01T00:00:00Z"
+            }));
+    });
+
+    #[derive(serde::Serialize)]
+    struct NewUser {
+        name: String,
+    }
+
+    let doc_ref = db.collection("users").add(&NewUser { name: "New User".to_string() }).await.unwrap();
+    assert_eq!(doc_ref.path, "projects/test-project/databases/(default)/documents/users/auto-id");
+    
+    mock.assert();
+}

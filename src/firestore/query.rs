@@ -20,7 +20,6 @@ use serde::Serialize;
 pub struct Query<'a> {
     pub(crate) client: &'a ClientWithMiddleware,
     pub(crate) parent_path: String, // projects/{id}/databases/{id}/documents or .../documents/col/doc
-    pub(crate) collection_id: String,
     pub(crate) query: StructuredQuery,
 }
 
@@ -33,7 +32,6 @@ impl<'a> Query<'a> {
         Self {
             client,
             parent_path,
-            collection_id: collection_id.clone(),
             query: StructuredQuery {
                 select: None,
                 from: Some(vec![CollectionSelector {

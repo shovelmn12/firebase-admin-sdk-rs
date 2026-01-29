@@ -118,3 +118,79 @@ async fn test_publish_remote_config() {
 
     mock.assert();
 }
+
+#[tokio::test]
+async fn test_list_versions() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let base_url = server.url("/v1/projects/test-project/remoteConfig");
+
+    let rc = FirebaseRemoteConfig::new_with_client(client, base_url);
+
+    let mock = server.mock(|when, then| {
+        when.method(GET)
+            .path("/v1/projects/test-project/remoteConfig/versions")
+            .query_param("pageSize", "10");
+        then.status(200)
+            .header("content-type", "application/json")
+            .json_body(serde_json::json!({
+                "versions": [
+                    {
+                        "versionNumber": "2",
+                        "updateTime": "2023-01-02T00:00:00Z",
+                        "updateUser": { "email": "user2@example.com", "name": "User 2" },
+                        "updateOrigin": "CONSOLE",
+                        "updateType": "INCREMENTAL_UPDATE"
+                    },
+                    {
+                        "versionNumber": "1",
+                        "updateTime": "2023-01-01T00:00:00Z",
+                        "updateUser": { "email": "user1@example.com", "name": "User 1" },
+                        "updateOrigin": "CONSOLE",
+                        "updateType": "INCREMENTAL_UPDATE"
+                    }
+                ],
+                "nextPageToken": "token"
+            }));
+    });
+
+    let result = rc.list_versions(Some(crate::remote_config::models::ListVersionsOptions {
+        page_size: Some(10),
+        page_token: None,
+        ..Default::default()
+    })).await.unwrap();
+
+    assert_eq!(result.versions.len(), 2);
+    assert_eq!(result.next_page_token.unwrap(), "token");
+
+    mock.assert();
+}
+
+#[tokio::test]
+async fn test_rollback() {
+    let server = MockServer::start();
+    let client = ClientBuilder::new(Client::new()).build();
+    let base_url = server.url("/v1/projects/test-project/remoteConfig");
+
+    let rc = FirebaseRemoteConfig::new_with_client(client, base_url);
+
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/projects/test-project/remoteConfig:rollback")
+            .json_body(serde_json::json!({
+                "versionNumber": "1"
+            }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .header("ETag", "\"rolled-back-etag\"")
+            .json_body(serde_json::json!({
+                "parameters": {},
+                "etag": "\"rolled-back-etag\""
+            }));
+    });
+
+    let config = rc.rollback("1".to_string()).await.unwrap();
+    assert_eq!(config.etag, "\"rolled-back-etag\"");
+
+    mock.assert();
+}
