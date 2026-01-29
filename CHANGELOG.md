@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Testing**: Added comprehensive unit tests for Crashlytics, Remote Config, Auth, and Firestore modules.
 - **Docs**: Converted documentation examples to `no_run` to ensure they compile and stay up-to-date.
 
+### Refactor
+- **Firestore**: Refactored `Query` API to support a reusable builder pattern (`Query` struct) and `ExecutableQuery`.
+
 ## [0.2.1] - 2026-01-29
 
 ### Changed
