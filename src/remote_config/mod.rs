@@ -8,6 +8,8 @@
 //! If the remote configuration has changed since it was fetched, the publish operation will fail.
 
 pub mod models;
+#[cfg(test)]
+mod tests;
 
 use crate::core::middleware::AuthMiddleware;
 use crate::remote_config::models::RemoteConfig;
@@ -171,7 +173,7 @@ impl FirebaseRemoteConfig {
         let mut url_obj = Url::parse(&url).map_err(|e| Error::Api {
             code: 0,
             message: e.to_string(),
-            status: "INTERNAL".to_string()
+            status: "INTERNAL".to_string(),
         })?;
 
         if let Some(opts) = options {
@@ -184,11 +186,7 @@ impl FirebaseRemoteConfig {
             }
         }
 
-        let response = self
-            .client
-            .get(url_obj)
-            .send()
-            .await?;
+        let response = self.client.get(url_obj).send().await?;
         self.process_response(response).await
     }
 
@@ -209,6 +207,3 @@ impl FirebaseRemoteConfig {
         Ok(config)
     }
 }
-
-#[cfg(test)]
-mod tests;
