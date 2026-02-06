@@ -1,6 +1,6 @@
 [package]
 name = "firebase-admin-sdk"
-version = "0.2.2"
+version = "0.2.3"
 description = "Firebase Admin SDK for Rust, enabling interaction with Firebase services (Auth, FCM, Firestore, Storage, etc.) from a Rust backend."
 repository = "https://github.com/shovelmn12/firebase-admin-sdk-rs"
 license = "MIT"
@@ -8,21 +8,21 @@ edition = "2021"
 
 [dependencies]
 reqwest = { version = "0.13.1", features = ["json", "rustls"] }
-reqwest-middleware = { version = "0.5.0", features = ["json", "query"] }
-reqwest-retry = "0.9.0"
+reqwest-middleware = { version = "0.5.1", features = ["json", "query"] }
+reqwest-retry = "0.9.1"
 tokio = { version = "1.49.0", features = ["full"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 yup-oauth2 = "12.1.2"
 thiserror = "2.0.18"
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 async-trait = "0.1.89"
 hyper-rustls = "0.27.7"
-hyper-util = { version = "0.1.19", features = ["client-legacy"] }
+hyper-util = { version = "0.1.20", features = ["client-legacy"] }
 http = "1.4.0"
 futures = { version = "0.3.31", optional = true }
-bytes = { version = "1.11.0", optional = true }
+bytes = { version = "1.11.1", optional = true }
 chrono = { version = "0.4.43", features = ["serde"] }
 rsa = "0.9.10"
 sha2 = "0.10.9"

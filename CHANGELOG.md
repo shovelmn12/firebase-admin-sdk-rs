@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-02-06
+
+### Added
+- **Testing**: Significantly expanded CRUD test coverage for Auth, Firestore, Storage, Messaging, and Remote Config.
+
+### Changed
+- **Messaging**: Refactored `FirebaseMessaging` to support mock URLs for all API endpoints.
+- **Firestore**: Removed unused `collection_id` from `Query` struct.
+- **Dependencies**: Updated various dependencies including `jsonwebtoken`, `reqwest-middleware`, and `anyhow`.
+
+### Fixed
+- **Auth**: Added `#[serde(default)]` to `UserRecord::disabled` to prevent deserialization errors when the field is missing from API responses.
+
 ## [0.2.2] - 2026-01-29
 
 ### Added
