@@ -288,7 +288,7 @@ impl FirebaseAuth {
             request.continue_url = Some(s.url);
             request.can_handle_code_in_app = s.handle_code_in_app;
             request.dynamic_link_domain = s.dynamic_link_domain;
-            
+
             if let Some(ios) = s.ios {
                 request.ios_bundle_id = Some(ios.bundle_id);
             }

@@ -19,6 +19,7 @@ pub struct UserRecord {
     /// The user's phone number.
     pub phone_number: Option<String>,
     /// Whether the user is disabled.
+    #[serde(default)]
     pub disabled: bool,
     /// Additional metadata about the user.
     pub metadata: Option<UserMetadata>,
