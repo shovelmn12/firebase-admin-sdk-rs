@@ -6,10 +6,10 @@
 
 pub mod keys;
 pub mod models;
-pub mod verifier;
-pub mod tenant_mgt;
 pub mod project_config;
 pub mod project_config_impl;
+pub mod tenant_mgt;
+pub mod verifier;
 
 use crate::auth::models::{
     ActionCodeSettings, CreateSessionCookieRequest, CreateSessionCookieResponse, CreateUserRequest,
@@ -17,9 +17,9 @@ use crate::auth::models::{
     GetAccountInfoResponse, ImportUsersRequest, ImportUsersResponse, ListUsersResponse,
     UpdateUserRequest, UserRecord,
 };
-use crate::auth::verifier::{FirebaseTokenClaims, IdTokenVerifier, TokenVerificationError};
-use crate::auth::tenant_mgt::TenantAwareness;
 use crate::auth::project_config_impl::ProjectConfig;
+use crate::auth::tenant_mgt::TenantAwareness;
+use crate::auth::verifier::{FirebaseTokenClaims, IdTokenVerifier, TokenVerificationError};
 use crate::core::middleware::AuthMiddleware;
 use crate::core::parse_error_response;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
@@ -34,7 +34,8 @@ use thiserror::Error;
 use url::Url;
 
 const AUTH_V1_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}";
-const AUTH_V1_TENANT_API: &str = "https://identitytoolkit.googleapis.com/v1/projects/{project_id}/tenants/{tenant_id}";
+const AUTH_V1_TENANT_API: &str =
+    "https://identitytoolkit.googleapis.com/v1/projects/{project_id}/tenants/{tenant_id}";
 
 /// Errors that can occur during Authentication operations.
 #[derive(Error, Debug)]
@@ -113,9 +114,11 @@ impl FirebaseAuth {
         let tenant_id = middleware.tenant_id();
 
         let base_url = if let Some(tid) = &tenant_id {
-             AUTH_V1_TENANT_API.replace("{project_id}", &project_id).replace("{tenant_id}", tid)
+            AUTH_V1_TENANT_API
+                .replace("{project_id}", &project_id)
+                .replace("{tenant_id}", tid)
         } else {
-             AUTH_V1_API.replace("{project_id}", &project_id)
+            AUTH_V1_API.replace("{project_id}", &project_id)
         };
 
         Self {
@@ -204,7 +207,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Create session cookie failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Create session cookie failed").await,
+            ));
         }
 
         let result: CreateSessionCookieResponse = response.json().await?;
@@ -247,7 +252,10 @@ impl FirebaseAuth {
 
         let mut final_claims = custom_claims.unwrap_or_default();
         if let Some(tid) = &self.tenant_id {
-            final_claims.insert("tenant_id".to_string(), serde_json::Value::String(tid.clone()));
+            final_claims.insert(
+                "tenant_id".to_string(),
+                serde_json::Value::String(tid.clone()),
+            );
         }
 
         let claims = CustomTokenClaims {
@@ -309,7 +317,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Generate email link failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Generate email link failed").await,
+            ));
         }
 
         let result: EmailLinkResponse = response.json().await?;
@@ -366,7 +376,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Import users failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Import users failed").await,
+            ));
         }
 
         let result: ImportUsersResponse = response.json().await?;
@@ -406,7 +418,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Create user failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Create user failed").await,
+            ));
         }
 
         let user: UserRecord = response.json().await?;
@@ -426,7 +440,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Update user failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Update user failed").await,
+            ));
         }
 
         let user: UserRecord = response.json().await?;
@@ -449,7 +465,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Delete user failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Delete user failed").await,
+            ));
         }
 
         Ok(())
@@ -471,7 +489,9 @@ impl FirebaseAuth {
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "Get user failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "Get user failed").await,
+            ));
         }
 
         let result: GetAccountInfoResponse = response.json().await?;
@@ -537,7 +557,9 @@ impl FirebaseAuth {
         let response = self.client.get(url_obj).send().await?;
 
         if !response.status().is_success() {
-            return Err(AuthError::ApiError(parse_error_response(response, "List users failed").await));
+            return Err(AuthError::ApiError(
+                parse_error_response(response, "List users failed").await,
+            ));
         }
 
         let result: ListUsersResponse = response.json().await?;
