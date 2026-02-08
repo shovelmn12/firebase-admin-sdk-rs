@@ -1,8 +1,8 @@
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use crate::auth::keys::{KeyFetchError, PublicKeyManager};
+use jsonwebtoken::{decode, decode_header, Algorithm, Validation};
 use serde::{Deserialize, Serialize};
-use crate::auth::keys::{PublicKeyManager, KeyFetchError};
-use thiserror::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TokenVerificationError {
@@ -18,13 +18,19 @@ pub enum TokenVerificationError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FirebaseTokenClaims {
-    pub aud: String,
     pub iss: String,
+    pub aud: String,
     pub sub: String,
-    pub exp: usize,
-    pub iat: usize,
-    pub auth_time: usize,
+    pub iat: u64,
+    pub exp: u64,
+    pub auth_time: u64,
     pub user_id: String,
+    pub provider_id: Option<String>,
+    pub name: Option<String>,
+    pub picture: Option<String>,
+    pub email: Option<String>,
+    pub email_verified: Option<bool>,
+
     #[serde(flatten)]
     pub claims: serde_json::Map<String, serde_json::Value>,
 }
@@ -43,23 +49,42 @@ impl IdTokenVerifier {
     }
 
     /// Verifies a Firebase ID token.
-    pub async fn verify_id_token(&self, token: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
-        self.verify_token_with_issuer(token, &format!("https://securetoken.google.com/{}", self.project_id)).await
+    pub async fn verify_id_token(
+        &self,
+        token: &str,
+    ) -> Result<FirebaseTokenClaims, TokenVerificationError> {
+        self.verify_token_with_issuer(
+            token,
+            &format!("https://securetoken.google.com/{}", self.project_id),
+        )
+        .await
     }
 
     /// Verifies a Firebase Session Cookie.
-    pub async fn verify_session_cookie(&self, token: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
-        self.verify_token_with_issuer(token, &format!("https://session.firebase.google.com/{}", self.project_id)).await
+    pub async fn verify_session_cookie(
+        &self,
+        token: &str,
+    ) -> Result<FirebaseTokenClaims, TokenVerificationError> {
+        self.verify_token_with_issuer(
+            token,
+            &format!("https://session.firebase.google.com/{}", self.project_id),
+        )
+        .await
     }
 
-    async fn verify_token_with_issuer(&self, token: &str, issuer: &str) -> Result<FirebaseTokenClaims, TokenVerificationError> {
+    async fn verify_token_with_issuer(
+        &self,
+        token: &str,
+        issuer: &str,
+    ) -> Result<FirebaseTokenClaims, TokenVerificationError> {
         // 1. Decode header to get kid
         let header = decode_header(token)?;
-        let kid = header.kid.ok_or_else(|| TokenVerificationError::InvalidToken("Missing kid in header".to_string()))?;
+        let kid = header.kid.ok_or_else(|| {
+            TokenVerificationError::InvalidToken("Missing kid in header".to_string())
+        })?;
 
         // 2. Get public key
-        let public_key_pem = self.key_manager.get_key(&kid).await?;
-        let key = DecodingKey::from_rsa_pem(public_key_pem.as_bytes())?;
+        let key = self.key_manager.get_key(&kid).await?;
 
         // 3. Configure validation
         let mut validation = Validation::new(Algorithm::RS256);
@@ -72,14 +97,22 @@ impl IdTokenVerifier {
 
         // 5. Additional validations (sub not empty, auth_time < now)
         if claims.sub.is_empty() {
-            return Err(TokenVerificationError::InvalidToken("Subject (sub) claim must not be empty".to_string()));
+            return Err(TokenVerificationError::InvalidToken(
+                "Subject (sub) claim must not be empty".to_string(),
+            ));
         }
 
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as usize;
         // Allowing some clock skew? jsonwebtoken handles exp/iat with leeway.
         // auth_time validation usually not strictly enforced by jsonwebtoken default.
-        if claims.auth_time > now + 300 { // 5 minutes future skew tolerance
-             return Err(TokenVerificationError::InvalidToken("Auth time is in the future".to_string()));
+        if claims.auth_time > (now + 300) as u64 {
+            // 5 minutes future skew tolerance
+            return Err(TokenVerificationError::InvalidToken(
+                "Auth time is in the future".to_string(),
+            ));
         }
 
         Ok(claims)
