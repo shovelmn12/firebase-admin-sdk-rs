@@ -28,6 +28,12 @@ pub struct PublicKeyManager {
     cache: Arc<RwLock<Option<CachedKeys>>>,
 }
 
+impl Default for PublicKeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PublicKeyManager {
     pub fn new() -> Self {
         Self {

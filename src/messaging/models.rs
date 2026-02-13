@@ -418,7 +418,7 @@ pub enum ApsAlert {
     /// An alert message string.
     String(String),
     /// An alert dictionary.
-    Dictionary(ApsAlertDictionary),
+    Dictionary(Box<ApsAlertDictionary>),
 }
 
 /// An alert dictionary.
