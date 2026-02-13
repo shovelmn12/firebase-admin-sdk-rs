@@ -123,7 +123,7 @@ pub(crate) fn convert_serde_value_to_firestore_value(
 // Path format: projects/{project_id}/databases/(default)/documents/...
 pub(crate) fn extract_database_path(path: &str) -> String {
     let parts: Vec<&str> = path.split("/documents").collect();
-    if parts.len() > 0 {
+    if !parts.is_empty() {
         parts[0].to_string()
     } else {
         // Fallback
@@ -164,7 +164,7 @@ impl<'a> DocumentReference<'a> {
         let response = self.client.get(&self.path).send().await?;
 
         // Extract ID from path
-        let id = self.path.split('/').last().unwrap_or_default().to_string();
+        let id = self.path.split('/').next_back().unwrap_or_default().to_string();
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(DocumentSnapshot {
@@ -513,7 +513,7 @@ impl<'a> CollectionReference<'a> {
         };
 
         let target = Target {
-            target_type: Some(TargetType::Query(query_target)),
+            target_type: Some(TargetType::Query(Box::new(query_target))),
             target_id: Some(1), // Arbitrary ID
             resume_token: None,
             read_time: None,

@@ -99,8 +99,8 @@ impl FirebaseStorage {
     /// # Arguments
     ///
     /// * `name` - The name of the bucket (e.g. "my-project.appspot.com").
-    ///            If not provided, it attempts to use the default bucket name derived from the project ID
-    ///            (e.g., "{project_id}.appspot.com").
+    ///   If not provided, it attempts to use the default bucket name derived from the project ID
+    ///   (e.g., "{project_id}.appspot.com").
     pub fn bucket(&self, name: Option<&str>) -> Bucket {
         let bucket_name = match name {
             Some(n) => n.to_string(),

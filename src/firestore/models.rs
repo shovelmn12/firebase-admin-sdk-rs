@@ -322,7 +322,7 @@ pub struct Target {
 #[serde(rename_all = "camelCase")]
 pub enum TargetType {
     /// A target specified by a query.
-    Query(QueryTarget),
+    Query(Box<QueryTarget>),
     /// A target specified by a set of document names.
     Documents(DocumentsTarget),
 }
@@ -390,10 +390,11 @@ pub struct TargetChange {
 }
 
 /// The type of change.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TargetChangeType {
     /// No change has occurred.
+    #[default]
     NoChange,
     /// The targets have been added.
     Add,
@@ -404,12 +405,6 @@ pub enum TargetChangeType {
     Current,
     /// The targets have been reset.
     Reset,
-}
-
-impl Default for TargetChangeType {
-    fn default() -> Self {
-        TargetChangeType::NoChange
-    }
 }
 
 /// A Document has changed.

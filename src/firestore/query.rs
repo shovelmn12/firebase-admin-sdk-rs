@@ -188,7 +188,7 @@ impl<'a> Query<'a> {
                 // Construct DocumentSnapshot
                 // Extract ID from name
                 let name = doc.name.clone();
-                let id = name.split('/').last().unwrap_or_default().to_string();
+                let id = name.split('/').next_back().unwrap_or_default().to_string();
 
                 let doc_ref = DocumentReference {
                     client: self.client,
@@ -220,7 +220,7 @@ impl<'a> Query<'a> {
         };
 
         let target = Target {
-            target_type: Some(TargetType::Query(query_target)),
+            target_type: Some(TargetType::Query(Box::new(query_target))),
             target_id: Some(1), // Arbitrary ID
             resume_token: None,
             read_time: None,

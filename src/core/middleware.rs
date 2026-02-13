@@ -65,7 +65,7 @@ impl AuthMiddleware {
             ServiceAccountAuthenticator::builder(key)
                 .build()
                 .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                .map_err(std::io::Error::other)
         }).await?;
 
         let scopes = &["https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/firebase"];

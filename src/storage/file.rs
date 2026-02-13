@@ -178,7 +178,7 @@ impl File {
             .unwrap_or(Duration::from_secs(0))
             .as_secs();
 
-        let mut query_params = vec![
+        let mut query_params = [
             ("X-Goog-Algorithm", "GOOG4-RSA-SHA256".to_string()),
             (
                 "X-Goog-Credential",
