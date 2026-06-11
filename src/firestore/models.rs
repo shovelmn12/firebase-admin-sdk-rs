@@ -53,14 +53,16 @@ pub enum ValueType {
 }
 
 /// A map value.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(default)]
 pub struct MapValue {
     /// The map's fields.
     pub fields: HashMap<String, Value>,
 }
 
 /// An array value.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(default)]
 pub struct ArrayValue {
     /// The array's values.
     pub values: Vec<Value>,
