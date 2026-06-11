@@ -151,11 +151,11 @@ impl File {
 
                 let now = SystemTime::now();
 
-                
+
 
                 let iso_date = chrono::DateTime::<chrono::Utc>::from(now).format("%Y%m%dT%H%M%SZ").to_string();
 
-        
+
         let date_stamp = &iso_date[0..8]; // YYYYMMDD
 
         let credential_scope = format!("{}/auto/storage/goog4_request", date_stamp);
@@ -190,7 +190,7 @@ impl File {
         ];
 
         query_params.sort_by(|a, b| a.0.cmp(b.0));
-        
+
         let canonical_query_string = query_params.iter()
             .map(|(k, v)| {
                 let encoded_k = url::form_urlencoded::byte_serialize(k.as_bytes()).collect::<String>();
@@ -446,5 +446,55 @@ impl File {
         }
 
         Ok(response.json().await?)
+    }
+
+    /// Makes the file public (readable by anyone).
+    ///
+    /// This method adds an ACL entry granting "READER" permission to "allUsers".
+    pub async fn make_public(&self) -> Result<(), StorageError> {
+        let encoded_name =
+            url::form_urlencoded::byte_serialize(self.name.as_bytes()).collect::<String>();
+        let url = format!(
+            "{}/b/{}/o/{}/acl",
+            self.base_url, self.bucket_name, encoded_name
+        );
+
+        let body = serde_json::json!({
+            "entity": "allUsers",
+            "role": "READER"
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header(header::CONTENT_TYPE, "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(StorageError::ApiError(format!(
+                "Make public failed {}: {}",
+                status, text
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Returns the public URL of the file.
+    ///
+    /// This URL is public and does not require authentication. Note that the file
+    /// must be made public first (e.g., using `make_public()`) for this URL to be accessible.
+    pub fn public_url(&self) -> String {
+        let encoded_name = url::form_urlencoded::byte_serialize(self.name.as_bytes())
+            .collect::<String>()
+            .replace("+", "%20");
+        format!(
+            "https://storage.googleapis.com/{}/{}",
+            self.bucket_name, encoded_name
+        )
     }
 }
